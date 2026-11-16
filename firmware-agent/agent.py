@@ -116,8 +116,6 @@ def process(jobpath):
         if job.get('id') != jid: raise ValueError('Job identifier mismatch')
         package, digest=validate(job)
         cfg=settings()
-        if cfg.get('SIMULATION','true').lower() == 'true':
-            raise RuntimeError('Disable simulation before attempting a hardware flash')
         device=cfg.get('RADIO_DEVICE','')
         if not device.startswith('/dev/') or device == '/dev/' or not Path(device).exists():
             raise RuntimeError(f'Radio serial device not found: {device}')

@@ -7,7 +7,6 @@ read -rp 'This will REPLACE data in the current database. Type RESTORE: ' CONFIR
 source .env
 # The API/collector must not write while restoring.
 docker compose --profile radio stop collector api >/dev/null 2>&1 || true
-docker compose --profile simulation stop simulator >/dev/null 2>&1 || true
 docker compose up -d db
 sleep 3
 docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'

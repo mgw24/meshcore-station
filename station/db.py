@@ -16,6 +16,13 @@ class Contact(Base):
     last_seen = Column(DateTime(timezone=True), default=utcnow)
     detail = Column(JSON, default=dict)
 
+class NodeLocation(Base):
+    __tablename__ = 'node_locations'
+    public_key = Column(String(130), primary_key=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    updated = Column(DateTime(timezone=True), default=utcnow)
+
 class Message(Base):
     __tablename__ = 'messages'
     id = Column(Integer, primary_key=True)

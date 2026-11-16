@@ -20,8 +20,11 @@ from prometheus_client import CollectorRegistry, Gauge, generate_latest, CONTENT
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
-                            COOKIE_SECURE, SPOOL_DIR, SIMULATION)
-from station.db import (initialize, Session, Contact, Message, Sample, Alert,
+                            COOKIE_SECURE, SPOOL_DIR, RADIO_POWER_SOURCE)
+from station.geo import advertised_location, contact_role
+from station.health import packet_detail, delta, seconds_old
+from station.secure import seal_key
+from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert,
                         Command, RadioEvent, StationStatus, utcnow)
 
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
@@ -101,7 +104,7 @@ def status(session=Depends(user_session)):
         data = {row.key: {'value': row.value, 'updated': row.updated.isoformat()}
                 for row in db.scalars(select(StationStatus)).all()}
         last = db.scalars(select(Sample).order_by(Sample.ts.desc()).limit(1)).first()
-        counts = {'contacts': db.scalar(select(func.count()).select_from(Contact)),
+        counts = {'contacts': db.scalar(select(func.count()).select_from(Contact).where(~Contact.public_key.in_(['a1'*32, 'b2'*32]))),
                   'messages': db.scalar(select(func.count()).select_from(Message)),
                   'alerts': db.scalar(select(func.count()).select_from(Alert).where(Alert.resolved == False))}
     hb = data.get('worker_heartbeat')
@@ -111,19 +114,19 @@ def status(session=Depends(user_session)):
     except (ValueError, KeyError, TypeError): fresh = False
     radio = data.get('radio', {}).get('value', {})
     radio['connected'] = bool(fresh and radio.get('connected'))
-    return {'radio': radio, 'counts': counts,
-            'sample': {'ts': last.ts.isoformat(), 'battery_pct': last.battery_pct,
+    return {'radio': radio, 'power_source': RADIO_POWER_SOURCE, 'counts': counts,
+            'sample': {'ts': last.ts.isoformat(), 'battery_pct': None if RADIO_POWER_SOURCE == 'usb' else last.battery_pct,
                        'noise_floor': last.noise_floor, 'uptime': last.uptime,
                        'rssi': last.rssi, 'snr': last.snr,
                        'packets_rx': last.packets_rx, 'packets_tx': last.packets_tx} if last else None,
-            'heartbeat_fresh': fresh, 'simulation': radio.get('mode') == 'simulation',
+            'heartbeat_fresh': fresh, 'contact_sync': data.get('contact_sync', {}).get('value', {}),
             'channels': data.get('channels', {}).get('value', []),
             'last_stats': data.get('last_stats', {}).get('value', {})}
 
 @app.get('/api/contacts')
 def contacts(session=Depends(user_session)):
     with Session() as db:
-        rows = db.scalars(select(Contact).order_by(Contact.last_seen.desc()).limit(2000)).all()
+        rows = db.scalars(select(Contact).where(~Contact.public_key.in_(['a1'*32, 'b2'*32])).order_by(Contact.last_seen.desc()).limit(2000)).all()
         return [{'key': c.public_key, 'name': c.name, 'role': c.role,
                  'first_seen': c.first_seen.isoformat(), 'last_seen': c.last_seen.isoformat(),
                  'detail': c.detail} for c in rows]
@@ -163,9 +166,47 @@ def history(hours: int = 24, session=Depends(user_session)):
     with Session() as db:
         rows = db.scalars(select(Sample).where(Sample.ts >= utcnow() - timedelta(hours=hours))
                           .order_by(Sample.ts.desc()).limit(1000)).all()
-        return [{'ts': x.ts.isoformat(), 'battery': x.battery_pct, 'noise': x.noise_floor,
-                 'uptime': x.uptime, 'rssi': x.rssi, 'snr': x.snr,
-                 'packets_rx': x.packets_rx, 'packets_tx': x.packets_tx} for x in reversed(rows)]
+        rows = [x for x in rows if not (x.stats or {}).get('simulated')]
+        result = []
+        for x in reversed(rows):
+            p = packet_detail(x)
+            result.append({'ts': x.ts.isoformat(), 'battery': None if RADIO_POWER_SOURCE == 'usb' else x.battery_pct,
+                           'noise': x.noise_floor, 'uptime': x.uptime, 'rssi': x.rssi, 'snr': x.snr,
+                           'packets_rx': x.packets_rx, 'packets_tx': x.packets_tx,
+                           'rx_errors': p['rx_errors'], 'flood_rx': p['flood_rx'], 'direct_rx': p['direct_rx'],
+                           'rx_air_secs': p['rx_air_secs'], 'tx_air_secs': p['tx_air_secs'],
+                           'core_errors': p['core_errors'],
+                           'simulated': False})
+        return result
+
+
+@app.get('/api/radio/health')
+def radio_health(session=Depends(user_session)):
+    now = utcnow()
+    with Session() as db:
+        samples = [x for x in db.scalars(select(Sample).order_by(Sample.ts.desc()).limit(40)).all() if not (x.stats or {}).get('simulated')][:2]
+        radio_status = db.get(StationStatus, 'radio')
+        heartbeat = db.get(StationStatus, 'worker_heartbeat')
+        fresh_heartbeat = (seconds_old(heartbeat.updated, now) < 35) if heartbeat else False
+        connected = bool(fresh_heartbeat and radio_status and radio_status.value.get('connected'))
+    current, previous = (samples[0] if samples else None), (samples[1] if len(samples) > 1 else None)
+    latest = packet_detail(current)
+    prior = packet_detail(previous)
+    uptime = latest.get('uptime_secs')
+    old_uptime = prior.get('uptime_secs')
+    counters = ('rx', 'tx', 'rx_errors', 'flood_rx', 'direct_rx')
+    return {'connected': connected,
+            'power_source': RADIO_POWER_SOURCE,
+            'sample_ts': current.ts.isoformat() if current else None,
+            'sample_age_secs': seconds_old(current.ts, now) if current else None,
+            'sample_fresh': bool(current and seconds_old(current.ts, now) <= 150),
+            'heartbeat_age_secs': seconds_old(heartbeat.updated, now) if heartbeat else None,
+
+            'measurements': latest,
+            'deltas': {field: delta(latest.get(field), prior.get(field), uptime, old_uptime) for field in counters},
+            'delta_interval_secs': round((current.ts - previous.ts).total_seconds()) if current and previous else None,
+            'note': 'RF packet receive counts include non-chat traffic. No traffic alone does not establish a fault.'}
+
 
 class CommandIn(BaseModel):
     kind: str
@@ -239,7 +280,6 @@ def validate_firmware(filename: str, content: bytes):
 @app.post('/api/firmware/upload')
 async def firmware_upload(request: Request, file: UploadFile = File(...), confirmation: str = Form(...),
                           session=Depends(require_csrf)):
-    if SIMULATION: raise HTTPException(409, 'Switch to real USB serial mode before firmware flashing')
     if confirmation != 'FLASH T114': raise HTTPException(422, 'Type FLASH T114 to confirm')
     if file.content_type not in ('application/zip', 'application/x-zip-compressed', 'application/octet-stream', None):
         raise HTTPException(422, 'Firmware must be a ZIP archive')
@@ -291,6 +331,136 @@ def firmware_job(job_id: str, session=Depends(user_session)):
     payload['log'] = log_file.read_text(errors='replace')[-15000:] if log_file.exists() else ''
     return payload
 
+class RadioSettings(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=31)
+    tx_power: int | None = Field(default=None, ge=2, le=22)
+    radio_freq: float | None = Field(default=None, ge=902, le=928)
+    radio_bw: float | None = None
+    radio_sf: int | None = Field(default=None, ge=7, le=12)
+    radio_cr: int | None = Field(default=None, ge=5, le=8)
+    confirm: str
+
+@app.get('/api/radio/config')
+def radio_config(session=Depends(user_session)):
+    with Session() as db:
+        state = db.get(StationStatus, 'radio_config')
+        return state.value if state else {}
+
+@app.post('/api/radio/read')
+def radio_read(session=Depends(require_csrf)):
+    with Session.begin() as db:
+        cmd = Command(kind='read_radio', args={}, state='pending')
+        db.add(cmd); db.flush()
+        return {'id': cmd.id, 'state': cmd.state}
+
+@app.post('/api/radio/settings')
+def radio_settings(body: RadioSettings, session=Depends(require_csrf)):
+    if body.confirm != 'APPLY RADIO': raise HTTPException(422, 'Type APPLY RADIO to confirm')
+    updates = body.model_dump(exclude_none=True, exclude={'confirm'})
+    keys = set(updates)
+    radio_keys = {'radio_freq','radio_bw','radio_sf','radio_cr'}
+    if keys & radio_keys:
+        if not radio_keys.issubset(keys):
+            raise HTTPException(422, 'Submit all four radio parameters together')
+        if updates['radio_bw'] not in (62.5, 125.0, 250.0, 500.0):
+            raise HTTPException(422, 'Unsupported bandwidth')
+    if not updates: raise HTTPException(422, 'No changes supplied')
+    with Session.begin() as db:
+        cmd = Command(kind='configure_radio', args={'updates': updates}, state='pending')
+        db.add(cmd); db.flush()
+        return {'id': cmd.id, 'state': cmd.state}
+
+# Public API never returns keys, including channel secrets. They live temporarily in
+# the command queue and are scrubbed by the collector after processing.
+class ChannelUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=31)
+    secret_hex: str | None = None
+    confirm: str
+
+class ChannelDelete(BaseModel):
+    confirm: str
+
+@app.get('/api/channels')
+def channel_list(session=Depends(user_session)):
+    with Session() as db:
+        value = db.get(StationStatus, 'channels')
+        items = value.value if value and isinstance(value.value, list) else []
+    indexed = {x.get('index'): x for x in items if isinstance(x, dict)}
+    return {'slots': [{'index': i, 'name': str(indexed.get(i, {}).get('name') or ''),
+                       'configured': bool(indexed.get(i, {}).get('name'))} for i in range(8)],
+            'source': 'T114 cached channel listing, secrets hidden'}
+
+@app.post('/api/channels/refresh')
+def channel_refresh(session=Depends(require_csrf)):
+    with Session.begin() as db:
+        item = Command(kind='channels', args={}, state='pending')
+        db.add(item); db.flush()
+        return {'id': item.id, 'state': item.state}
+
+@app.put('/api/channels/{index}')
+def channel_update(index: int, body: ChannelUpdate, session=Depends(require_csrf)):
+    if not 0 <= index <= 7: raise HTTPException(422, 'Channel index must be 0-7')
+    if body.confirm != 'SAVE CHANNEL': raise HTTPException(422, 'Type SAVE CHANNEL to confirm')
+    name = body.name.strip()
+    if not name: raise HTTPException(422, 'Channel name must not be blank')
+    secret = body.secret_hex.strip() if body.secret_hex is not None else None
+    if secret is not None and not re.fullmatch(r'[0-9a-fA-F]{32}', secret):
+        raise HTTPException(422, 'Shared key must be exactly 32 hexadecimal characters (16 bytes)')
+    args = {'index': index, 'name': name}
+    if secret is not None: args['sealed_key'] = seal_key(secret.lower())
+    with Session.begin() as db:
+        item = Command(kind='set_channel', args=args, state='pending')
+        db.add(item); db.flush()
+        return {'id': item.id, 'state': item.state}
+
+@app.delete('/api/channels/{index}')
+def channel_delete(index: int, body: ChannelDelete, session=Depends(require_csrf)):
+    if not 0 <= index <= 7: raise HTTPException(422, 'Channel index must be 0-7')
+    if body.confirm != f'DELETE CHANNEL {index}':
+        raise HTTPException(422, f'Type DELETE CHANNEL {index} to confirm')
+    with Session.begin() as db:
+        item = Command(kind='delete_channel', args={'index': index}, state='pending')
+        db.add(item); db.flush()
+        return {'id': item.id, 'state': item.state}
+
+class LocationInput(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+@app.get('/api/map/nodes')
+def map_nodes(session=Depends(user_session)):
+    with Session() as db:
+        manual = {x.public_key: x for x in db.scalars(select(NodeLocation)).all()}
+        rows = db.scalars(select(Contact).where(~Contact.public_key.in_(['a1'*32, 'b2'*32])).order_by(Contact.name)).all()
+        nodes=[]
+        for c in rows:
+            location = advertised_location(c.detail or {})
+            if c.public_key in manual:
+                o = manual[c.public_key]
+                location={'lat': o.latitude, 'lon': o.longitude, 'source': 'manual'}
+            nodes.append({'key': c.public_key, 'name': c.name,
+                          'role': (contact_role(c.detail or {}) if contact_role(c.detail or {}) != 'unknown' else c.role),
+                          'last_seen': c.last_seen.isoformat(), 'location': location})
+    return nodes
+
+@app.put('/api/map/nodes/{public_key}/location')
+def set_node_location(public_key: str, body: LocationInput, session=Depends(require_csrf)):
+    if body.latitude == 0 and body.longitude == 0: raise HTTPException(422, 'Unknown location (0,0) is not allowed')
+    with Session.begin() as db:
+        if db.get(Contact, public_key) is None: raise HTTPException(404, 'Unknown contact')
+        loc = db.get(NodeLocation, public_key)
+        if loc is None:
+            loc=NodeLocation(public_key=public_key); db.add(loc)
+        loc.latitude, loc.longitude, loc.updated = body.latitude, body.longitude, utcnow()
+    return {'ok': True, 'source': 'manual'}
+
+@app.delete('/api/map/nodes/{public_key}/location')
+def clear_node_location(public_key: str, session=Depends(require_csrf)):
+    with Session.begin() as db:
+        loc = db.get(NodeLocation, public_key)
+        if loc: db.delete(loc)
+    return {'ok': True}
+
 @app.get('/metrics')
 def metrics():
     registry = CollectorRegistry()
@@ -298,6 +468,9 @@ def metrics():
     total = Gauge('meshcore_messages_total_logged', 'Logged messages', registry=registry)
     nodes = Gauge('meshcore_contacts_known', 'Known MeshCore nodes', registry=registry)
     critical = Gauge('meshcore_unresolved_alerts', 'Unresolved alerts', registry=registry)
+    rf_gauges = {key: Gauge('meshcore_radio_'+key, 'Latest MeshCore radio '+key.replace('_',' '), registry=registry)
+                 for key in ('rx_packets','tx_packets','rx_errors','flood_rx','direct_rx','noise_floor_dbm','uptime_seconds','telemetry_age_seconds')}
+    synced = Gauge('meshcore_radio_contacts_returned', 'Contacts returned by last radio sync', registry=registry)
     with Session() as db:
         radio = db.get(StationStatus, 'radio')
         heartbeat = db.get(StationStatus, 'worker_heartbeat')
@@ -306,4 +479,13 @@ def metrics():
         total.set(db.scalar(select(func.count()).select_from(Message)))
         nodes.set(db.scalar(select(func.count()).select_from(Contact)))
         critical.set(db.scalar(select(func.count()).select_from(Alert).where(Alert.resolved == False)))
+        sample = db.scalar(select(Sample).order_by(Sample.ts.desc()).limit(1))
+        contact_info = db.get(StationStatus, 'contact_sync')
+        if contact_info and isinstance(contact_info.value, dict):
+            synced.set(contact_info.value.get('radio_contacts', 0))
+        if sample is not None:
+            d = packet_detail(sample)
+            for prometheus_key, detail_key in [('rx_packets','rx'),('tx_packets','tx'),('rx_errors','rx_errors'),('flood_rx','flood_rx'),('direct_rx','direct_rx'),('noise_floor_dbm','noise_floor'),('uptime_seconds','uptime_secs')]:
+                if d.get(detail_key) is not None: rf_gauges[prometheus_key].set(d[detail_key])
+            rf_gauges['telemetry_age_seconds'].set(seconds_old(sample.ts, utcnow()))
     return Response(content=generate_latest(registry), media_type=CONTENT_TYPE_LATEST)

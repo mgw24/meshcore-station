@@ -3,12 +3,13 @@ import asyncio
 import json
 import logging
 import os
-import random
 import smtplib
 from email.message import EmailMessage
 from datetime import timedelta
 from sqlalchemy import select
-from station.config import SIMULATION, RADIO_DEVICE
+from station.config import RADIO_DEVICE, RADIO_POWER_SOURCE
+from station.geo import contact_role
+from station.secure import unseal_key
 from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command,
                         RadioEvent, StationStatus, status_set, record_event, utcnow)
 
@@ -22,7 +23,7 @@ def jsonsafe(value):
     if isinstance(value, (int, float, str, type(None), bool)): return value
     return str(value)
 
-def record_contact(key, contact):
+def record_contact(key, contact, observed=False):
     obj = jsonsafe(contact) if isinstance(contact, dict) else {}
     pk = str(jsonsafe(obj.get('public_key') or key)).lower()
     if not pk or pk == 'none': return
@@ -32,16 +33,16 @@ def record_contact(key, contact):
             row = Contact(public_key=pk, first_seen=utcnow())
             db.add(row)
         row.name = str(obj.get('adv_name') or obj.get('name') or pk[:12])[:200]
-        row.role = str(obj.get('type') or obj.get('role') or 'unknown')[:80]
-        row.last_seen = utcnow()
+        row.role = contact_role(obj)[:80]
+        if observed:
+            row.last_seen = utcnow()
         row.detail = obj
 
 class Collector:
     def __init__(self):
         self.mesh = None
-        self.mode = 'simulation' if SIMULATION else 'serial'
+        self.mode = 'serial'
         self.last_alert = None
-        self.last_simulated_message = None
 
     async def handle(self, kind, event):
         data = jsonsafe(getattr(event, 'payload', {}))
@@ -69,7 +70,10 @@ class Collector:
                             row.status = 'acknowledged'
                             break
         elif kind in ('advert', 'new_contact'):
-            record_event(kind, data)
+            safe = {k: v for k, v in data.items() if not any(t in k.lower() for t in ('secret', 'private_key', 'password'))} if isinstance(data, dict) else {}
+            record_event(kind, safe)
+            if kind == 'advert' and isinstance(data, dict) and isinstance(data.get('public_key'), (str, bytes)):
+                record_contact(data['public_key'], data, observed=True)
             if kind == 'new_contact':
                 try: await self.refresh_contacts()
                 except Exception as exc: log.warning('Contact refresh: %s', exc)
@@ -77,21 +81,9 @@ class Collector:
             record_event(kind, data)
 
     async def connect(self):
-        if SIMULATION:
-            for pk, name, role in [('a1'*32, 'Demo Relay', 'repeater'),
-                                    ('b2'*32, 'Demo Companion', 'companion')]:
-                record_contact(pk, {'public_key': pk, 'adv_name': name, 'role': role})
-            status_set('radio', {'connected': True, 'mode': 'simulation', 'device': 'virtual'})
-        with Session.begin() as db:
-            for alert in db.scalars(select(Alert).where(Alert.resolved == False, Alert.message.like('Collector offline:%'))).all():
-                alert.resolved = True
-            record_event('connected', {'mode': 'simulation'})
-            await self.refresh_channels()
-            await self.poll_radio()
-            return
         from meshcore import MeshCore, EventType
         self.mesh = await MeshCore.create_serial(RADIO_DEVICE, 115200)
-        if not getattr(self.mesh, 'is_connected', True):
+        if self.mesh is None or not getattr(self.mesh, 'is_connected', True):
             raise RuntimeError('Serial MeshCore connection not established')
         for etype, kind in [('CONTACT_MSG_RECV', 'direct'), ('CHANNEL_MSG_RECV', 'channel'),
                             ('ACK', 'ack'), ('ADVERTISEMENT', 'advert'),
@@ -121,39 +113,54 @@ class Collector:
         status_set('radio', {'connected': False, 'mode': self.mode, 'device': RADIO_DEVICE})
 
     async def refresh_contacts(self):
-        if SIMULATION: return {'count': 2}
         from meshcore import EventType
         result = await self.mesh.commands.get_contacts()
         if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
         payload = result.payload or {}
-        for key, item in payload.items(): record_contact(key, item)
-        record_event('contacts_refreshed', {'count': len(payload)})
-        return {'count': len(payload)}
+        if isinstance(payload, dict) and isinstance(payload.get('contacts'), (dict, list)):
+            payload = payload['contacts']
+        if isinstance(payload, dict):
+            entries = list(payload.items())
+        elif isinstance(payload, list):
+            entries = [(item.get('public_key') or item.get('pubkey') or '', item)
+                       for item in payload if isinstance(item, dict)]
+        else:
+            raise RuntimeError('Unknown contact-list response')
+        with Session() as db:
+            before = set(db.scalars(select(Contact.public_key)).all())
+        discovered = 0
+        for key, item in entries:
+            if isinstance(item, dict):
+                pk = str(jsonsafe(item.get('public_key') or key)).lower()
+                if pk and pk not in before:
+                    discovered += 1
+                    before.add(pk)
+                record_contact(key, item)
+        info = {'radio_contacts': len(entries), 'new_in_sync': discovered,
+                'sync_at': utcnow().isoformat()}
+        status_set('contact_sync', info)
+        record_event('contacts_refreshed', info)
+        return info
 
     async def refresh_channels(self):
-        if SIMULATION:
-            status_set('channels', [{'index': i, 'name': 'Public' if i == 0 else f'Channel {i}'} for i in range(8)])
-            return
         from meshcore import EventType
         channels = []
         for index in range(8):
+            entry = {'index': index, 'name': '', 'configured': False}
             try:
                 result = await asyncio.wait_for(self.mesh.commands.get_channel(index), timeout=5)
                 if result.type != EventType.ERROR and isinstance(result.payload, dict):
-                    channels.append({'index': index, 'name': str(result.payload.get('name') or f'Channel {index}')[:50]})
+                    name = str(result.payload.get('channel_name') or result.payload.get('name') or '')[:50]
+                    entry.update(name=name, configured=bool(name))
             except Exception as exc:
                 log.debug('Channel %d unavailable: %s', index, exc)
+            channels.append(entry)
         status_set('channels', channels)
 
     async def poll_radio(self):
-        if SIMULATION:
-            with Session.begin() as db:
-                db.add(Sample(battery_pct=95, noise_floor=-113 + random.randint(-4, 4),
-                              uptime=random.randint(10000, 20000), stats={'simulated': True}))
-            return
         from meshcore import EventType
         captured = {}
-        for name, method in [('battery', 'get_bat'), ('core', 'get_stats_core'),
+        for name, method in ([('battery', 'get_bat')] if RADIO_POWER_SOURCE != 'usb' else []) + [('core', 'get_stats_core'),
                              ('radio', 'get_stats_radio'), ('packets', 'get_stats_packets')]:
             try:
                 result = await asyncio.wait_for(getattr(self.mesh.commands, method)(), timeout=12)
@@ -166,7 +173,7 @@ class Collector:
                     return float(data[key])
             return None
         with Session.begin() as db:
-            db.add(Sample(battery_pct=number(captured.get('battery'), 'level', 'battery_pct'),
+            db.add(Sample(battery_pct=None if RADIO_POWER_SOURCE == 'usb' else number(captured.get('battery'), 'battery_pct'),
                           noise_floor=number(captured.get('radio'), 'noise_floor', 'noise_floor_dbm'),
                           uptime=number(captured.get('core'), 'uptime', 'uptime_seconds'),
                           rssi=number(captured.get('radio'), 'last_rssi', 'rssi', 'last_rssi_dbm'),
@@ -180,11 +187,10 @@ class Collector:
         args = cmd.args or {}
         if cmd.kind == 'contacts': return await self.refresh_contacts()
         if cmd.kind == 'advert':
-            if not SIMULATION:
-                from meshcore import EventType
-                result = await self.mesh.commands.send_advert(flood=bool(args.get('flood', False)))
-                if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
-            return {'accepted': True, 'simulated': SIMULATION}
+            from meshcore import EventType
+            result = await self.mesh.commands.send_advert(flood=bool(args.get('flood', False)))
+            if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
+            return {'accepted': True}
         if cmd.kind == 'send':
             kind = args.get('kind')
             dest = str(args.get('destination', ''))
@@ -195,24 +201,77 @@ class Collector:
                 with Session() as db:
                     contact = db.get(Contact, dest)
                     if contact is None: raise ValueError('Choose a known contact')
-                if not SIMULATION:
-                    result = await self.mesh.commands.send_msg(dest, body)
+                result = await self.mesh.commands.send_msg(dest, body)
             else:
                 if not dest.isdecimal() or not 0 <= int(dest) <= 7:
                     raise ValueError('Invalid channel index 0-7')
-                if not SIMULATION:
-                    result = await self.mesh.commands.send_chan_msg(int(dest), body)
-            if SIMULATION:
-                data = {'simulated': True}
-            else:
-                from meshcore import EventType
-                if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
-                data = jsonsafe(result.payload)
+                result = await self.mesh.commands.send_chan_msg(int(dest), body)
+            from meshcore import EventType
+            if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
+            data = jsonsafe(result.payload)
             with Session.begin() as db:
                 db.add(Message(direction='out', kind=kind, target=dest, sender='local', body=body,
-                               status='simulated' if SIMULATION else ('sent_unconfirmed' if kind == 'direct' else 'sent'),
+                               status='sent_unconfirmed' if kind == 'direct' else 'sent',
                                meta=data if isinstance(data, dict) else {'response': data}))
-            return {'accepted': True, 'simulated': SIMULATION, 'radio_response': data}
+            record_event('outgoing_command_accepted', {'kind': kind, 'destination': dest})
+            return {'accepted': True, 'radio_response': data}
+        if cmd.kind == 'read_radio':
+            from meshcore import EventType
+            info = await self.mesh.commands.send_appstart()
+            if info.type == EventType.ERROR: raise RuntimeError(str(info.payload))
+            safe = jsonsafe(info.payload or {})
+            permitted = ('name','radio_freq','radio_bw','radio_sf','radio_cr','tx_power','adv_lat','adv_lon')
+            result = {k: safe[k] for k in permitted if k in safe}
+            status_set('radio_config', result)
+            return result
+        if cmd.kind == 'configure_radio':
+            updates = args.get('updates') or {}
+            from meshcore import EventType
+            result_data = {}
+            if 'name' in updates:
+                response = await self.mesh.commands.set_name(updates['name'])
+                if response.type == EventType.ERROR: raise RuntimeError('Unable to set node name')
+                result_data['name'] = updates['name']
+            if 'tx_power' in updates:
+                response = await self.mesh.commands.set_tx_power(updates['tx_power'])
+                if response.type == EventType.ERROR: raise RuntimeError('Unable to set TX power')
+                result_data['tx_power'] = updates['tx_power']
+            if 'radio_freq' in updates:
+                response = await self.mesh.commands.set_radio(updates['radio_freq'], updates['radio_bw'], updates['radio_sf'], updates['radio_cr'])
+                if response.type == EventType.ERROR: raise RuntimeError('Unable to apply radio preset')
+                result_data.update({k: updates[k] for k in ('radio_freq','radio_bw','radio_sf','radio_cr')})
+            record_event('radio_configuration_changed', {'fields': sorted(updates)})
+            return {'accepted': True, 'updated': result_data}
+        if cmd.kind == 'channels':
+            await self.refresh_channels()
+            return {'channels': 'refreshed'}
+        if cmd.kind in ('set_channel', 'delete_channel'):
+            from meshcore import EventType
+            idx = int(args['index'])
+            if not 0 <= idx <= 7: raise ValueError('Invalid channel slot')
+            if cmd.kind == 'delete_channel':
+                response = await self.mesh.commands.set_channel(idx, '', bytes(16))
+                if response.type == EventType.ERROR: raise RuntimeError('Radio rejected channel removal')
+                record_event('channel_deleted', {'index': idx})
+            else:
+                name = args['name']
+                sealed = args.get('sealed_key')
+                if sealed:
+                    secret = unseal_key(sealed)
+                else:
+                    old = await self.mesh.commands.get_channel(idx)
+                    if old.type == EventType.ERROR: raise RuntimeError('Cannot read existing channel key; supply key')
+                    old_payload = old.payload if isinstance(old.payload, dict) else {}
+                    secret = old_payload.get('channel_secret', old_payload.get('secret'))
+                    if isinstance(secret, str): secret = bytes.fromhex(secret)
+                    if not isinstance(secret, bytes) or len(secret) != 16 or secret == bytes(16):
+                        raise ValueError('Cannot rename empty channel without a 16-byte shared key')
+                if len(secret) != 16: raise ValueError('Channel secret must be exactly 16 bytes')
+                response = await self.mesh.commands.set_channel(idx, name, secret)
+                if response.type == EventType.ERROR: raise RuntimeError('Radio rejected channel update')
+                record_event('channel_updated', {'index': idx, 'name': name})
+            await self.refresh_channels()
+            return {'accepted': True, 'index': idx}
         raise ValueError('Unsupported command')
 
     async def drain_commands(self):
@@ -228,11 +287,13 @@ class Collector:
             log.exception('Command %s failed', ident)
             with Session.begin() as db:
                 row = db.get(Command, ident)
-                row.state, row.error, row.finished = 'failed', str(exc)[:1000], utcnow()
+                row.state, row.error, row.finished = 'failed', ('Channel update failed; check collector logs' if cmd.kind in ('set_channel','delete_channel') else str(exc)[:1000]), utcnow()
+                if cmd.kind in ('set_channel','delete_channel'): row.args = {}
         else:
             with Session.begin() as db:
                 row = db.get(Command, ident)
                 row.state, row.result, row.finished = 'complete', result, utcnow()
+                if cmd.kind in ('set_channel','delete_channel'): row.args = {}
         return True
 
     async def run_session(self):
@@ -249,11 +310,6 @@ class Collector:
             if now - last_contacts > 300:
                 await self.refresh_contacts()
                 last_contacts = now
-            if SIMULATION and (self.last_simulated_message is None or now - self.last_simulated_message > 75):
-                self.last_simulated_message = now
-                with Session.begin() as db:
-                    db.add(Message(direction='in', kind='channel', target='0', sender='Demo Relay',
-                                   body='Simulated incoming mesh message', status='received', meta={'simulated': True}))
             status_set('worker_heartbeat', {'at': utcnow().isoformat(), 'mode': self.mode})
             if not drained: await asyncio.sleep(2)
 
@@ -288,6 +344,7 @@ async def main():
         # Crash recovery for queued work; never replay a send (could duplicate RF messages).
         for cmd in db.scalars(select(Command).where(Command.state == 'running')).all():
             cmd.state, cmd.error, cmd.finished = 'failed', 'Collector restarted; not retried', utcnow()
+            if cmd.kind in ('set_channel', 'delete_channel'): cmd.args = {}
     worker = Collector()
     while True:
         try:

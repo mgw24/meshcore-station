@@ -15,3 +15,11 @@ groups:
           severity: critical
         annotations:
           summary: MeshCore station web API is unreachable
+
+      - alert: MeshCoreTelemetryStale
+        expr: meshcore_radio_telemetry_age_seconds > 240 and meshcore_collector_connected == 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: MeshCore radio telemetry is stale despite collector reporting connected

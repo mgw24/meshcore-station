@@ -1,12 +1,402 @@
 {
-  "uid":"meshcore-station","title":"MeshCore Station Overview","tags":["meshcore","radio"],
-  "timezone":"browser","schemaVersion":39,"version":1,"refresh":"30s",
-  "time":{"from":"now-24h","to":"now"},
-  "panels":[
-    {"id":1,"type":"timeseries","title":"Messages by minute","gridPos":{"x":0,"y":0,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT $__timeGroupAlias(ts, '1m'), count(*)::double precision AS value FROM messages WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1"}]},
-    {"id":2,"type":"timeseries","title":"Battery percentage","gridPos":{"x":12,"y":0,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT ts AS time, battery_pct AS value FROM samples WHERE $__timeFilter(ts) AND battery_pct IS NOT NULL ORDER BY ts"}]},
-    {"id":3,"type":"timeseries","title":"Radio noise floor (dBm)","gridPos":{"x":0,"y":8,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"}]},
-    {"id":4,"type":"timeseries","title":"Collector connected","gridPos":{"x":12,"y":8,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"meshcore-prometheus"},"targets":[{"refId":"A","expr":"meshcore_collector_connected","legendFormat":"connected"}]},
-    {"id":5,"type":"timeseries","title":"Incoming vs outgoing messages","gridPos":{"x":0,"y":16,"w":24,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT $__timeGroupAlias(ts, '5m'), count(*)::double precision AS value, direction AS metric FROM messages WHERE $__timeFilter(ts) GROUP BY 1, direction ORDER BY 1"}]}
+  "uid": "meshcore-station",
+  "title": "MeshCore Station \u2014 Live Radio & Messaging",
+  "tags": [
+    "meshcore",
+    "radio",
+    "production"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 3,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Messages by minute",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(ts, '1m'), count(*)::double precision AS value FROM messages WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Radio noise floor (dBm)",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Collector connected",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_collector_connected",
+          "legendFormat": "connected"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Incoming vs outgoing messages",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(ts, '5m'), count(*)::double precision AS value, direction AS metric FROM messages WHERE $__timeFilter(ts) GROUP BY 1, direction ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Radio packets received and transmitted (since T114 boot)",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, packets_rx AS value FROM samples WHERE $__timeFilter(ts) AND packets_rx IS NOT NULL ORDER BY ts"
+        },
+        {
+          "refId": "B",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, packets_tx AS value FROM samples WHERE $__timeFilter(ts) AND packets_tx IS NOT NULL ORDER BY ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Receive errors / CRC failures",
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS value FROM samples WHERE $__timeFilter(ts) AND stats->'packets'->>'recv_errors' IS NOT NULL ORDER BY ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Received packet rate (5m)",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "clamp_min(rate(meshcore_radio_rx_packets[5m]),0)",
+          "legendFormat": "RX packets/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Receive error rate (5m)",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "clamp_min(rate(meshcore_radio_rx_errors[5m]),0)",
+          "legendFormat": "Errors/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Radio noise (dBm)",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Last RSSI (dBm)",
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, rssi AS value FROM samples WHERE $__timeFilter(ts) AND rssi IS NOT NULL ORDER BY ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Radio uptime (seconds)",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_radio_uptime_seconds",
+          "legendFormat": "Uptime"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Telemetry age (seconds)",
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_radio_telemetry_age_seconds",
+          "legendFormat": "Age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Known contact inventory",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_contacts_known",
+          "legendFormat": "Contacts"
+        },
+        {
+          "refId": "B",
+          "expr": "meshcore_radio_contacts_returned",
+          "legendFormat": "Radio contacts in last sync"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Flood RX vs direct RX",
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_radio_flood_rx",
+          "legendFormat": "Flood"
+        },
+        {
+          "refId": "B",
+          "expr": "meshcore_radio_direct_rx",
+          "legendFormat": "Direct"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
   ]
 }

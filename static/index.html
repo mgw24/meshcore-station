@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=3"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -15,23 +15,25 @@
     <button class="nav active" data-view="overview">▣ <span>Overview</span></button>
     <button class="nav" data-view="messages">◫ <span>Messages</span></button>
     <button class="nav" data-view="nodes">⟠ <span>Nodes & Contacts</span></button>
+    <button class="nav" data-view="map">◎ <span>Node Map</span></button>
+    <button class="nav" data-view="health">◉ <span>Radio Health</span></button>
     <button class="nav" data-view="telemetry">⌁ <span>Telemetry</span></button>
     <button class="nav" data-view="alerts">◈ <span>Alerts</span></button>
     <button class="nav" data-view="events">☷ <span>Event Log</span></button>
   </nav><div class="nav-label">MAINTENANCE</div>
-  <nav><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button>
+  <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
   </nav><div class="side-footer"><div>MeshCore USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
-  <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
+  <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
 </header>
 <div class="content">
 <section id="view-overview" class="view"><div class="kpis">
   <article class="kpi"><span class="eyebrow">RADIO STATUS</span><b id="kpi-radio">—</b><small id="kpi-device">Waiting for collector</small></article>
-  <article class="kpi"><span class="eyebrow">KNOWN NODES</span><b id="kpi-nodes">—</b><small>Contacts discovered</small></article>
+  <article class="kpi"><span class="eyebrow">KNOWN NODES</span><b id="kpi-nodes">—</b><small id="nodes-kpi-detail">Saved radio contacts, not RF packets</small></article>
   <article class="kpi"><span class="eyebrow">LOGGED MESSAGES</span><b id="kpi-messages">—</b><small>Received + transmitted</small></article>
-  <article class="kpi"><span class="eyebrow">BATTERY</span><b id="kpi-battery">—</b><small>Most recent telemetry</small></article>
+  <article class="kpi"><span class="eyebrow" id="power-title">POWER SOURCE</span><b id="kpi-battery">—</b><small id="power-caption">Configured power source</small></article>
 </div>
 <div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">LAST 24 HOURS</span><h2>Radio signal environment</h2></div><span class="legend">● Noise floor (dBm)</span></div><div id="overview-chart" class="chart"></div></article>
 <article class="panel"><div class="panel-head"><div><span class="eyebrow">LIVE ACTIVITY</span><h2>Recent messages</h2></div><button class="subtle go-messages">View all ↗</button></div><div id="recent-messages" class="stream"></div></article></div>
@@ -44,8 +46,43 @@
   <label>Message<textarea id="message-text" rows="5" maxlength="180" placeholder="Type a short radio message…" required></textarea></label>
   <div class="form-row"><span id="char-count" class="muted">0 / 180</span><button class="button primary" type="submit">Transmit ↗</button></div><p class="hint">Direct sends are initially marked “sent/unconfirmed” until acknowledged. Channel messages do not have a direct-message ACK.</p>
   </form></article><article class="panel"><div class="panel-head"><h2>Message history</h2><a href="/api/export/messages.csv" id="export-messages" class="subtle">Export CSV ↓</a></div><div id="all-messages" class="stream tall"></div></article></div></section>
-<section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
-<section id="view-telemetry" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><h2>Battery history</h2></div><div id="battery-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Noise floor history</h2></div><div id="noise-chart" class="chart"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Packet counters (RX)</h2></div><div id="rx-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Last packet RSSI (dBm)</h2></div><div id="rssi-chart" class="chart"></div></article></div><article class="panel"><div class="panel-head"><h2>Detailed statistics</h2></div><div id="telemetry-info" class="text-block"></div></article></section>
+<section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><p id="contact-sync-summary" class="hint">Waiting for contact sync</p><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
+<section id="view-health" class="view" hidden>
+ <div class="kpis health-kpis">
+  <article class="kpi"><span class="eyebrow">VALID RX PACKETS</span><b id="health-rx">—</b><small>Since device boot</small></article>
+  <article class="kpi"><span class="eyebrow">TRANSMITTED PACKETS</span><b id="health-tx">—</b><small>Since device boot</small></article>
+  <article class="kpi"><span class="eyebrow">RX ERRORS / CRC</span><b id="health-errors">—</b><small>Since device boot</small></article>
+  <article class="kpi"><span class="eyebrow">TELEMETRY AGE</span><b id="health-age">—</b><small id="health-freshness">Last recorded sample</small></article>
+ </div>
+ <div class="two-col"><article class="panel"><div class="panel-head"><h2>Packets received / transmitted</h2><span class="legend">Live hardware counters</span></div><div id="health-rx-chart" class="chart"></div><div id="health-tx-chart" class="chart"></div></article>
+ <article class="panel"><div class="panel-head"><h2>Receive error history</h2></div><div id="health-error-chart" class="chart"></div><p class="hint">Counters can reset when the T114 reboots. RF packets include advertisements and repeater traffic, not only messages.</p></article></div>
+ <article class="panel"><div class="panel-head"><h2>Radio diagnostics</h2></div><div id="health-details" class="health-details" aria-live="polite"></div></article>
+</section>
+<section id="view-telemetry" class="view" hidden><div class="two-col"><article class="panel" id="battery-panel"><div class="panel-head"><h2>Battery history</h2></div><div id="battery-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Noise floor history</h2></div><div id="noise-chart" class="chart"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Packet counters (RX)</h2></div><div id="rx-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Last packet RSSI (dBm)</h2></div><div id="rssi-chart" class="chart"></div></article></div><article class="panel"><div class="panel-head"><h2>Detailed statistics</h2></div><div id="telemetry-info" class="text-block"></div></article></section>
+<section id="view-map" class="view" hidden>
+<article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERED CONTACTS</span><h2>Node and repeater map</h2></div><button id="map-refresh" class="button secondary">Refresh map</button></div>
+<p class="hint">Only advertised or manually entered coordinates are plotted. Radio signal and contact names are not used to infer locations. Map tiles and library require internet access from your browser.</p>
+<div class="map-actions"><button type="button" class="button secondary" id="map-zoom-in" aria-label="Zoom in">+</button><button type="button" class="button secondary" id="map-zoom-out" aria-label="Zoom out">−</button><button type="button" class="button secondary" id="map-fit">Fit nodes</button></div>
+<div id="map-canvas" class="node-map" role="region" aria-label="Interactive MeshCore node map"><div class="map-tiles" id="map-tiles"></div><div class="map-pins" id="map-pins"></div><div class="map-fallback" id="map-fallback" hidden>Base-map tiles are unavailable. Node positions remain visible on the coordinate grid.</div><div class="map-attribution">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div></div><p id="map-summary" class="hint"></p></article>
+<article class="panel"><div class="panel-head"><h2>Unmapped contacts and location overrides</h2></div><div id="map-unmapped" class="stream"></div><form id="manual-location-form" class="map-location-form"><label>Contact<select id="map-contact" required></select></label><label>Latitude<input id="map-lat" type="number" min="-90" max="90" step="any" required></label><label>Longitude<input id="map-lon" type="number" min="-180" max="180" step="any" required></label><button class="button secondary" type="submit">Save manual location</button><button class="button secondary" type="button" id="map-clear">Clear manual location</button></form><p class="hint">Manual coordinates override advertised values until cleared. Node presence on the map does not mean the radio is currently reachable.</p></article></section>
+<section id="view-radio" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><h2>Radio configuration</h2><button id="radio-read" class="button secondary">Read from T114</button></div><pre id="radio-current" class="text-block">Not read yet</pre><p class="hint">Changes are queued to the running collector. Ensure the T114 is the correct 915 MHz hardware variant before changing RF parameters.</p></article><article class="panel"><div class="panel-head"><h2>Update node settings</h2></div><form id="radio-settings-form"><label>Node name<input id="radio-name" maxlength="31" placeholder="MeshCore-Station"></label><label>TX power in dBm (optional)<input id="radio-power" type="number" min="2" max="22" placeholder="Leave empty to keep current"></label><label>Frequency preset<select id="radio-preset"><option value="">Keep existing radio parameters</option><option value="us">USA/Canada 910.525 MHz, BW62.5, SF7, CR5</option></select></label><label>Type APPLY RADIO to confirm<input id="radio-confirm" placeholder="APPLY RADIO" required></label><button class="button primary" type="submit">Apply radio settings</button></form><p class="hint">Messaging channels: <span id="radio-channel-list">Not loaded</span>. Changing channel secrets is intentionally not offered here until secure backup and compatibility checks are implemented.</p></article></div></section>
+<section id="view-channels" class="view" hidden>
+ <article class="panel"><div class="panel-head"><div><span class="eyebrow">COMPANION CHANNEL SLOTS</span><h2>Channel management</h2></div><button id="channels-refresh" class="button secondary">Read channels from T114</button></div>
+ <p class="bodycopy">Manage slots 0–7. Channel secrets are never displayed or returned to the browser. To rename an existing channel, leave the key empty; the collector reads and preserves the existing key on the radio. Saving a new key replaces the current key.</p>
+ <div class="table-scroll"><table><thead><tr><th>SLOT</th><th>CHANNEL NAME</th><th>STATUS</th><th></th></tr></thead><tbody id="channels-table"></tbody></table></div>
+ </article>
+ <div class="two-col"><article class="panel"><h2>Create or edit channel</h2><form id="channel-form">
+ <label>Channel slot<select id="channel-slot" required></select></label>
+ <label>Channel name<input id="channel-name" maxlength="31" placeholder="Public" required></label>
+ <label>16-byte channel key (32 hexadecimal characters)<input id="channel-key" type="password" pattern="[0-9a-fA-F]{32}" maxlength="32" autocomplete="new-password" placeholder="Leave blank to preserve existing key"></label>
+ <label>Type SAVE CHANNEL<input id="channel-confirm" autocomplete="off" required placeholder="SAVE CHANNEL"></label>
+ <button class="button primary" type="submit">Save to radio</button></form>
+ <p class="hint">Use the same name and 16-byte key as the mesh group you intend to join. Do not paste private keys into screenshots or chat.</p></article>
+ <article class="panel"><h2>Remove a channel</h2><p class="bodycopy">This deletes the channel name and shared key on the T114. It does not delete your message history.</p><form id="channel-delete-form"><label>Channel slot<select id="channel-delete-slot"></select></label>
+ <label>Confirmation<input id="channel-delete-confirm" autocomplete="off" placeholder="DELETE CHANNEL 1" required></label>
+ <button class="button danger" type="submit">Remove channel</button></form>
+ <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
+</section>
 <section id="view-alerts" class="view" hidden><article class="panel"><div class="panel-head"><h2>Collector and station alerts</h2></div><div id="all-alerts" class="stream"></div></article></section>
 <section id="view-events" class="view" hidden><article class="panel"><div class="panel-head"><h2>Radio event log</h2></div><div id="event-list" class="stream tall"></div></article></section>
 <section id="view-firmware" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">HOST-ASSISTED SERIAL DFU</span><h2>Flash Heltec T114</h2></div></div>
@@ -55,4 +92,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=3"></script></body></html>

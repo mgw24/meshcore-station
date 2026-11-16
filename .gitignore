@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+runtime/
+*.sqlite
+*.pyc
+__pycache__/
+.pytest_cache/
+*.zip
+*.tar.gz
+*.log
+.venv/
+backups/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+runtime/
+backups/
+
+# Backups and temporary files
+*.backup
+__pycache__/
+*.pyc
