@@ -1,4 +1,4 @@
-# MeshCore Station — Production Edition v5
+# MeshCore Station — v5
 
 GitHub source: **https://github.com/mgw24/meshcore-station**
 
