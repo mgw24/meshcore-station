@@ -26,6 +26,12 @@ from station.health import packet_detail, delta, seconds_old
 from station.secure import seal_key
 from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert, AddressEntry, RxActivity,
                         Command, RadioEvent, StationStatus, utcnow)
+from station.db import DigestSettings, DigestDelivery
+from station.digest import (settings as get_digest_settings, public_settings, public_run,
+                            validate_configuration, validate_mail_ready, validate_addresses,
+                            encrypt_password, latest_due, next_due, lookback, report, aware_utc)
+from typing import Literal
+
 
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
@@ -542,6 +548,120 @@ def clear_node_location(public_key: str, session=Depends(require_csrf)):
         loc = db.get(NodeLocation, public_key)
         if loc: db.delete(loc)
     return {'ok': True}
+
+# All digest endpoints are authenticated. Write actions require the same CSRF check as
+# radio administration. SMTP credentials never appear in API responses or logs.
+class DigestInput(BaseModel):
+    enabled: bool = False
+    frequency: Literal['daily','twice_daily','weekly'] = 'daily'
+    send_time: str = Field(default='08:00', min_length=5, max_length=5)
+    weekday: int = Field(default=0, ge=0, le=6)
+    timezone: str = Field(default='America/Los_Angeles', max_length=80)
+    include_received: bool = True
+    include_sent: bool = False
+    include_radio: bool = True
+    include_alerts: bool = True
+    include_nodes: bool = True
+    include_rx: bool = False
+    message_limit: int = Field(default=100, ge=5, le=250)
+    smtp_host: str = Field(default='', max_length=255)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal['starttls','ssl','none'] = 'starttls'
+    smtp_username: str = Field(default='', max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=2048)
+    clear_password: bool = False
+    mail_from: str = Field(default='', max_length=255)
+    mail_to: str = Field(default='', max_length=2000)
+
+
+@app.get('/api/digest/settings')
+def digest_settings_read(session=Depends(user_session)):
+    with Session.begin() as db:
+        cfg = get_digest_settings(db)
+        item = public_settings(cfg)
+        nxt = next_due(cfg, utcnow()) if cfg.enabled else None
+        item['next_due'] = nxt.isoformat() if nxt else None
+        heartbeat = db.get(StationStatus, 'digest_worker_heartbeat')
+        item['worker_online'] = bool(heartbeat and (utcnow() - aware_utc(heartbeat.updated)).total_seconds() < 120)
+        return item
+
+
+@app.put('/api/digest/settings')
+def digest_settings_save(body: DigestInput, session=Depends(require_csrf)):
+    with Session.begin() as db:
+        cfg = get_digest_settings(db)
+        previous_schedule = (cfg.enabled, cfg.frequency, cfg.send_time, cfg.weekday, cfg.timezone)
+        updates = body.model_dump(exclude={'smtp_password', 'clear_password'})
+        for key, value in updates.items():
+            setattr(cfg, key, value.strip() if isinstance(value, str) else value)
+        if body.clear_password:
+            cfg.smtp_password_enc = ''
+        elif body.smtp_password:
+            try:
+                cfg.smtp_password_enc = encrypt_password(body.smtp_password)
+            except ValueError as exc:
+                raise HTTPException(503, str(exc)) from None
+        if cfg.mail_to:
+            try:
+                cfg.mail_to = ', '.join(validate_addresses(cfg.mail_to))
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from None
+        try:
+            validate_configuration(cfg)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if (cfg.enabled, cfg.frequency, cfg.send_time, cfg.weekday, cfg.timezone) != previous_schedule:
+            # Enabling/changing the schedule must never immediately email an old period.
+            cfg.schedule_anchor = utcnow()
+        cfg.updated_at = utcnow()
+        db.flush()
+        return {'ok': True, 'settings': public_settings(cfg),
+                'next_due': next_due(cfg, utcnow()).isoformat() if cfg.enabled else None}
+
+
+@app.get('/api/digest/preview')
+def digest_preview(session=Depends(user_session)):
+    with Session.begin() as db:
+        cfg = get_digest_settings(db)
+        end = utcnow()
+        content = report(cfg, end - lookback(cfg), end, db=db)
+        # Only the authenticated admin sees message content; never embed secrets.
+        return {'subject': content['subject'], 'text': content['text'],
+                'message_count': content['message_count'], 'sections': content['sections']}
+
+
+def enqueue_digest(kind):
+    with Session.begin() as db:
+        cfg = get_digest_settings(db)
+        try:
+            validate_mail_ready(cfg)
+            validate_configuration(cfg)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        end = utcnow()
+        run = DigestDelivery(kind=kind, status='queued',
+                             period_start=end - lookback(cfg), period_end=end)
+        db.add(run)
+        db.flush()
+        return {'id': run.id, 'status': run.status}
+
+
+@app.post('/api/digest/send-test')
+def digest_send_test(session=Depends(require_csrf)):
+    return enqueue_digest('test')
+
+
+@app.post('/api/digest/send-now')
+def digest_send_now(session=Depends(require_csrf)):
+    return enqueue_digest('manual')
+
+
+@app.get('/api/digest/history')
+def digest_history(session=Depends(user_session)):
+    with Session() as db:
+        runs = db.scalars(select(DigestDelivery).order_by(DigestDelivery.id.desc()).limit(30)).all()
+        return [public_run(x) for x in runs]
+
 
 @app.get('/metrics')
 def metrics():

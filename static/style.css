@@ -42,3 +42,15 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 .rx-line time,.rx-line .rx-values{color:var(--muted);font-variant-numeric:tabular-nums}
 .rx-line .rx-kind{font-weight:650;color:var(--text)}.rx-line .rx-extra{display:block;font-size:.75rem;color:var(--muted);margin-top:4px}
 @media(max-width:720px){.rx-line{grid-template-columns:1fr;gap:3px}.rx-filter select{min-width:130px;max-width:190px}.address-entry{padding:11px}}
+
+/* v5 email digests: compact on desktop, comfortable on mobile */
+.digest-layout{grid-template-columns:1fr 1fr;align-items:start}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+.check-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 16px;margin:0 0 15px}
+.checkline{display:flex;align-items:center;gap:10px;line-height:1.4;margin:8px 0 16px;cursor:pointer}
+.checkline input{width:18px;height:18px;flex:0 0 18px;margin:0;accent-color:var(--accent)}
+.digest-sections{margin-bottom:18px}
+.digest-limit{max-width:260px}
+.digest-preview{max-height:620px;overflow:auto;white-space:pre-wrap;line-height:1.5}
+@media(max-width:1100px){.digest-layout{grid-template-columns:1fr}.check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.field-grid,.check-grid{grid-template-columns:1fr}.digest-sections .actions .button{flex:1 1 140px}}

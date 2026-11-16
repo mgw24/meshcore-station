@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=4"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=5"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -22,7 +22,7 @@
     <button class="nav" data-view="alerts">◈ <span>Alerts</span></button>
     <button class="nav" data-view="events">☷ <span>Event Log</span></button>
   </nav><div class="nav-label">MAINTENANCE</div>
-  <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button>
+  <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
   </nav><div class="side-footer"><div>MeshCore USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
@@ -109,6 +109,52 @@
 </section>
 <section id="view-alerts" class="view" hidden><article class="panel"><div class="panel-head"><h2>Collector and station alerts</h2></div><div id="all-alerts" class="stream"></div></article></section>
 <section id="view-events" class="view" hidden><article class="panel"><div class="panel-head"><h2>Radio event log</h2></div><div id="event-list" class="stream tall"></div></article></section>
+<section id="view-digest" class="view" hidden>
+  <div class="panel-head"><div><span class="eyebrow">PRIVATE SMTP DELIVERY</span><h2>Scheduled station digest</h2><p class="hint">Send messages, radio status, node activity and issues using your SMTP server. The radio is not interrupted.</p></div>
+  <span id="digest-worker-status" class="pill amber">Scheduler status unknown</span></div>
+  <form id="digest-settings-form">
+  <div class="two-col digest-layout">
+    <article class="panel"><div class="panel-head"><h2>Schedule & recipients</h2></div>
+      <label class="checkline"><input type="checkbox" id="digest-enabled"> Enable scheduled email digest</label>
+      <div class="field-grid"><label>Frequency<select id="digest-frequency"><option value="daily">Daily</option><option value="twice_daily">Twice daily (12 hours apart)</option><option value="weekly">Weekly</option></select></label>
+      <label>Send time (selected timezone)<input id="digest-time" type="time" value="08:00" required></label>
+      <label>Day of week (weekly only)<select id="digest-weekday"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></label>
+      <label>Timezone (IANA)<input id="digest-timezone" type="text" value="America/Los_Angeles" spellcheck="false" maxlength="80" required></label></div>
+      <label>Recipients (comma separated)<textarea id="digest-recipients" rows="2" placeholder="you@example.com, second@example.com"></textarea></label>
+      <p id="digest-next" class="hint">Next scheduled delivery: not enabled</p>
+    </article>
+    <article class="panel"><div class="panel-head"><h2>Mail server</h2></div>
+      <div class="field-grid"><label>SMTP host<input id="digest-host" type="text" placeholder="smtp.example.com" maxlength="255" autocomplete="off"></label>
+      <label>SMTP port<input id="digest-port" type="number" min="1" max="65535" value="587" required></label>
+      <label>Connection security<select id="digest-security"><option value="starttls">STARTTLS (usually port 587)</option><option value="ssl">Implicit TLS / SSL (usually port 465)</option><option value="none">None (unauthenticated private relay only)</option></select></label>
+      <label>From address<input id="digest-from" type="email" placeholder="station@example.com" autocomplete="off"></label>
+      <label>SMTP username<input id="digest-username" type="text" autocomplete="off" placeholder="Optional for trusted relay" maxlength="255"></label>
+      <label>SMTP password / app password<input id="digest-password" type="password" autocomplete="new-password" placeholder="Leave blank to keep saved password"></label></div>
+      <label class="checkline"><input type="checkbox" id="digest-clear-password"> Clear stored SMTP password</label>
+      <p id="digest-password-state" class="hint">Credentials are encrypted at rest. Passwords never appear in the UI after saving.</p>
+      <p class="hint">SMTP server authentication requires STARTTLS or SSL. A plaintext connection is permitted only for an unauthenticated local relay. Digests may include sensitive message content—use trusted recipients.</p>
+    </article>
+  </div>
+  <article class="panel digest-sections"><div class="panel-head"><h2>Digest contents</h2></div>
+    <div class="check-grid">
+      <label class="checkline"><input id="digest-section-received" type="checkbox" checked> Received messages</label>
+      <label class="checkline"><input id="digest-section-sent" type="checkbox"> Sent messages</label>
+      <label class="checkline"><input id="digest-section-radio" type="checkbox" checked> Radio status & counters</label>
+      <label class="checkline"><input id="digest-section-alerts" type="checkbox" checked> Issues and alerts</label>
+      <label class="checkline"><input id="digest-section-nodes" type="checkbox" checked> Discovered nodes</label>
+      <label class="checkline"><input id="digest-section-rx" type="checkbox"> RX activity log</label>
+    </div>
+    <label class="digest-limit">Maximum messages per direction<input id="digest-limit" type="number" min="5" max="250" value="100"></label>
+    <div class="actions"><button class="button primary" type="submit">Save digest settings</button>
+      <button class="button secondary" id="digest-preview-btn" type="button">Preview report</button>
+      <button class="button secondary" id="digest-test-btn" type="button">Send test email</button>
+      <button class="button secondary" id="digest-now-btn" type="button">Send digest now</button></div>
+    <p class="hint">Save settings before sending. Test email contains no messages. “Send digest now” sends your selected report contents to the configured recipients.</p>
+  </article>
+  </form>
+  <div class="two-col digest-layout"><article class="panel"><div class="panel-head"><h2>Report preview</h2></div><pre id="digest-preview" class="text-block digest-preview">Choose “Preview report” to see the latest period.</pre></article>
+  <article class="panel"><div class="panel-head"><h2>Delivery history</h2><button id="digest-refresh-btn" class="subtle">Refresh ↻</button></div><div class="table-scroll"><table><thead><tr><th>TIME</th><th>TYPE</th><th>RESULT</th><th>DETAILS</th></tr></thead><tbody id="digest-history"></tbody></table></div><p class="hint">A delivery interrupted mid-send will be marked “unknown” on worker restart; it is not automatically retried to avoid duplicate emails.</p></article></div>
+</section>
 <section id="view-firmware" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">HOST-ASSISTED SERIAL DFU</span><h2>Flash Heltec T114</h2></div></div>
   <p class="bodycopy">Upload an official <b>Heltec_t114…companion_radio_usb…zip</b> package from the <a target="_blank" rel="noopener" href="https://flasher.meshcore.io/">MeshCore flasher</a>. The Ubuntu host agent pauses only the collector, flashes over USB, then restarts it.</p>
   <div class="warning"><b>Firmware update caution</b><p>Make a configuration backup first. Confirm the exact board variant and firmware role. The ESXi USB device may detach when the radio enters its bootloader; manual recovery may be required.</p></div>
@@ -116,4 +162,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=4"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=5"></script></body></html>

@@ -124,3 +124,45 @@ def status_set(key, value):
             row.updated = utcnow()
         else:
             db.add(StationStatus(key=key, value=value))
+
+class DigestSettings(Base):
+    """Single-station email digest configuration. SMTP password is Fernet-encrypted."""
+    __tablename__ = 'digest_settings'
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    frequency = Column(String(20), nullable=False, default='daily')
+    send_time = Column(String(5), nullable=False, default='08:00')
+    weekday = Column(Integer, nullable=False, default=0)
+    timezone = Column(String(80), nullable=False, default='America/Los_Angeles')
+    include_received = Column(Boolean, nullable=False, default=True)
+    include_sent = Column(Boolean, nullable=False, default=False)
+    include_radio = Column(Boolean, nullable=False, default=True)
+    include_alerts = Column(Boolean, nullable=False, default=True)
+    include_nodes = Column(Boolean, nullable=False, default=True)
+    include_rx = Column(Boolean, nullable=False, default=False)
+    message_limit = Column(Integer, nullable=False, default=100)
+    smtp_host = Column(String(255), nullable=False, default='')
+    smtp_port = Column(Integer, nullable=False, default=587)
+    smtp_security = Column(String(12), nullable=False, default='starttls')
+    smtp_username = Column(String(255), nullable=False, default='')
+    smtp_password_enc = Column(Text, nullable=False, default='')
+    mail_from = Column(String(255), nullable=False, default='')
+    mail_to = Column(Text, nullable=False, default='')
+    schedule_anchor = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+class DigestDelivery(Base):
+    """Durable queue/history, unique scheduled slot prevents duplicate automatic sends."""
+    __tablename__ = 'digest_deliveries'
+    id = Column(Integer, primary_key=True)
+    slot_key = Column(String(90), unique=True, nullable=True)
+    kind = Column(String(16), nullable=False)  # scheduled | manual | test
+    status = Column(String(20), nullable=False, default='queued')
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    period_start = Column(DateTime(timezone=True), nullable=True)
+    period_end = Column(DateTime(timezone=True), nullable=True)
+    recipient_count = Column(Integer, nullable=False, default=0)
+    message_count = Column(Integer, nullable=False, default=0)
+    error = Column(String(400), nullable=False, default='')

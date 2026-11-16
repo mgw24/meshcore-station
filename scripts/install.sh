@@ -41,6 +41,7 @@ chown -R 10001:10001 /opt/meshcore-station/runtime/spool
 chmod 0750 /opt/meshcore-station/runtime/spool /opt/meshcore-station/runtime/spool/*
 [ -f .env ] || ./scripts/configure.sh
 chmod 0600 .env
+./scripts/enable-digests.sh
 install -m 0644 firmware-agent/meshcore-firmware-agent.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now meshcore-firmware-agent

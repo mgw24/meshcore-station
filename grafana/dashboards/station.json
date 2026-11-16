@@ -1,14 +1,16 @@
 {
   "uid": "meshcore-station",
-  "title": "MeshCore Station \u2014 Live Radio & Messaging",
+  "title": "MeshCore Station · Radio Operations",
   "tags": [
     "meshcore",
+    "t114",
     "radio",
-    "production"
+    "operations",
+    "live"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-24h",
@@ -17,57 +19,14 @@
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
-      "title": "Messages by minute",
+      "type": "stat",
+      "title": "RADIO LINK",
+      "description": "Collector heartbeat and serial connection. ONLINE confirms the collector is connected, not mesh delivery.",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "postgres",
-        "uid": "meshcore-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "time_series",
-          "rawSql": "SELECT $__timeGroupAlias(ts, '1m'), count(*)::double precision AS value FROM messages WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Radio noise floor (dBm)",
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "postgres",
-        "uid": "meshcore-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "time_series",
-          "rawSql": "SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Collector connected",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -77,19 +36,178 @@
         {
           "refId": "A",
           "expr": "meshcore_collector_connected",
-          "legendFormat": "connected"
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6FDEA7"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OFFLINE",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "ONLINE",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
     },
     {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Incoming vs outgoing messages",
+      "id": 2,
+      "type": "stat",
+      "title": "RX PACKETS · BOOT",
+      "description": "Cumulative successfully received RF packets since T114 boot; may reset on power cycle.",
       "gridPos": {
-        "x": 0,
-        "y": 16,
-        "w": 24,
-        "h": 8
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_radio_rx_packets",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "TX PACKETS · BOOT",
+      "description": "Cumulative transmitted packets reported by T114, not confirmations of remote reception.",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_radio_tx_packets",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F5B663"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "NOISE FLOOR",
+      "description": "Last measured noise floor in the past 10 minutes. Lower (more negative) is generally quieter.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 5
       },
       "datasource": {
         "type": "postgres",
@@ -99,17 +217,176 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__timeGroupAlias(ts, '5m'), count(*)::double precision AS value, direction AS metric FROM messages WHERE $__timeFilter(ts) GROUP BY 1, direction ORDER BY 1"
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, noise_floor::double precision AS value FROM samples WHERE ts > now() - interval '10 minutes' AND noise_floor IS NOT NULL ORDER BY ts DESC LIMIT 1"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dBm",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6BAFFF"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
     },
     {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Radio packets received and transmitted (since T114 boot)",
+      "id": 5,
+      "type": "stat",
+      "title": "KNOWN NODES",
+      "description": "Real contact inventory in PostgreSQL; RF packet count and contact count are different metrics.",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::double precision AS value FROM contacts WHERE COALESCE(detail->>'simulated','false') <> 'true'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AA91F7"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "OPEN ALERTS",
+      "description": "Unresolved application alerts. Green at zero; higher values require review.",
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "meshcore-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "meshcore_unresolved_alerts",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6FDEA7"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "01 / RADIO TRAFFIC",
+      "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "RX traffic & receive errors · packets / interval",
+      "description": "Each bar is the number of changes within the displayed interval; resets and missing samples are excluded.",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
         "w": 16,
         "h": 8
       },
@@ -121,28 +398,97 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT ts AS time, packets_rx AS value FROM samples WHERE $__timeFilter(ts) AND packets_rx IS NOT NULL ORDER BY ts"
-        },
-        {
-          "refId": "B",
-          "format": "time_series",
-          "rawSql": "SELECT ts AS time, packets_tx AS value FROM samples WHERE $__timeFilter(ts) AND packets_tx IS NOT NULL ORDER BY ts"
+          "rawQuery": true,
+          "rawSql": "WITH source AS (\n SELECT ts, packets_rx AS rx,\n    packets_tx AS tx,\n    NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS err,\n    NULLIF(stats->'packets'->>'flood_rx', '')::double precision AS flood_rx,\n    NULLIF(stats->'packets'->>'direct_rx', '')::double precision AS direct_rx,\n    NULLIF(stats->'packets'->>'flood_tx', '')::double precision AS flood_tx,\n    NULLIF(stats->'packets'->>'direct_tx', '')::double precision AS direct_tx,\n COALESCE(NULLIF(stats->'core'->>'uptime_secs','')::double precision,uptime) AS radio_uptime\n FROM samples WHERE $__timeFilter(ts)\n), adjacent AS (\n SELECT *, LAG(ts) OVER (ORDER BY ts) AS prior_ts,\n LAG(radio_uptime) OVER (ORDER BY ts) AS prior_uptime,\n LAG(rx) OVER (ORDER BY ts) AS prior_rx,\n    LAG(tx) OVER (ORDER BY ts) AS prior_tx,\n    LAG(err) OVER (ORDER BY ts) AS prior_err,\n    LAG(flood_rx) OVER (ORDER BY ts) AS prior_flood_rx,\n    LAG(direct_rx) OVER (ORDER BY ts) AS prior_direct_rx,\n    LAG(flood_tx) OVER (ORDER BY ts) AS prior_flood_tx,\n    LAG(direct_tx) OVER (ORDER BY ts) AS prior_direct_tx\n FROM source\n), deltas AS (\n SELECT ts,\n CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND rx IS NOT NULL AND prior_rx IS NOT NULL AND rx >= prior_rx THEN rx - prior_rx END AS rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND tx IS NOT NULL AND prior_tx IS NOT NULL AND tx >= prior_tx THEN tx - prior_tx END AS tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND err IS NOT NULL AND prior_err IS NOT NULL AND err >= prior_err THEN err - prior_err END AS err,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_rx IS NOT NULL AND prior_flood_rx IS NOT NULL AND flood_rx >= prior_flood_rx THEN flood_rx - prior_flood_rx END AS flood_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_rx IS NOT NULL AND prior_direct_rx IS NOT NULL AND direct_rx >= prior_direct_rx THEN direct_rx - prior_direct_rx END AS direct_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_tx IS NOT NULL AND prior_flood_tx IS NOT NULL AND flood_tx >= prior_flood_tx THEN flood_tx - prior_flood_tx END AS flood_tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_tx IS NOT NULL AND prior_direct_tx IS NOT NULL AND direct_tx >= prior_direct_tx THEN direct_tx - prior_direct_tx END AS direct_tx\n FROM adjacent\n)\n SELECT $__timeGroupAlias(ts,$__interval),\n SUM(rx)::double precision AS \"Valid RX\",\n SUM(err)::double precision AS \"RX errors\"\n FROM deltas GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 78,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Valid RX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RX errors"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F17B8A"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
       }
     },
     {
-      "id": 11,
+      "id": 9,
       "type": "timeseries",
-      "title": "Receive errors / CRC failures",
+      "title": "Receive errors · percentage of attempts",
+      "description": "CRC/receive errors divided by successful packets plus errors for each bucket; zero traffic is shown as no data.",
       "gridPos": {
         "x": 16,
-        "y": 24,
+        "y": 6,
         "w": 8,
         "h": 8
       },
@@ -154,137 +500,391 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT ts AS time, NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS value FROM samples WHERE $__timeFilter(ts) AND stats->'packets'->>'recv_errors' IS NOT NULL ORDER BY ts"
+          "rawQuery": true,
+          "rawSql": "WITH source AS (\n SELECT ts, packets_rx AS rx,\n    packets_tx AS tx,\n    NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS err,\n    NULLIF(stats->'packets'->>'flood_rx', '')::double precision AS flood_rx,\n    NULLIF(stats->'packets'->>'direct_rx', '')::double precision AS direct_rx,\n    NULLIF(stats->'packets'->>'flood_tx', '')::double precision AS flood_tx,\n    NULLIF(stats->'packets'->>'direct_tx', '')::double precision AS direct_tx,\n COALESCE(NULLIF(stats->'core'->>'uptime_secs','')::double precision,uptime) AS radio_uptime\n FROM samples WHERE $__timeFilter(ts)\n), adjacent AS (\n SELECT *, LAG(ts) OVER (ORDER BY ts) AS prior_ts,\n LAG(radio_uptime) OVER (ORDER BY ts) AS prior_uptime,\n LAG(rx) OVER (ORDER BY ts) AS prior_rx,\n    LAG(tx) OVER (ORDER BY ts) AS prior_tx,\n    LAG(err) OVER (ORDER BY ts) AS prior_err,\n    LAG(flood_rx) OVER (ORDER BY ts) AS prior_flood_rx,\n    LAG(direct_rx) OVER (ORDER BY ts) AS prior_direct_rx,\n    LAG(flood_tx) OVER (ORDER BY ts) AS prior_flood_tx,\n    LAG(direct_tx) OVER (ORDER BY ts) AS prior_direct_tx\n FROM source\n), deltas AS (\n SELECT ts,\n CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND rx IS NOT NULL AND prior_rx IS NOT NULL AND rx >= prior_rx THEN rx - prior_rx END AS rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND tx IS NOT NULL AND prior_tx IS NOT NULL AND tx >= prior_tx THEN tx - prior_tx END AS tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND err IS NOT NULL AND prior_err IS NOT NULL AND err >= prior_err THEN err - prior_err END AS err,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_rx IS NOT NULL AND prior_flood_rx IS NOT NULL AND flood_rx >= prior_flood_rx THEN flood_rx - prior_flood_rx END AS flood_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_rx IS NOT NULL AND prior_direct_rx IS NOT NULL AND direct_rx >= prior_direct_rx THEN direct_rx - prior_direct_rx END AS direct_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_tx IS NOT NULL AND prior_flood_tx IS NOT NULL AND flood_tx >= prior_flood_tx THEN flood_tx - prior_flood_tx END AS flood_tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_tx IS NOT NULL AND prior_direct_tx IS NOT NULL AND direct_tx >= prior_direct_tx THEN direct_tx - prior_direct_tx END AS direct_tx\n FROM adjacent\n)\n SELECT $__timeGroupAlias(ts,$__interval),\n CASE WHEN COALESCE(SUM(rx),0)+COALESCE(SUM(err),0)>0 THEN (100.0*SUM(err)/NULLIF(COALESCE(SUM(rx),0)+COALESCE(SUM(err),0),0))::double precision END AS \"Error share\"\n FROM deltas GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#F17B8A"
+          },
+          "decimals": 1,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 17,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
         },
         "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "piechart",
+      "title": "RF receive composition · since boot",
+      "description": "Last reported cumulative radio breakdown; counts are not individual decoded chat messages.",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT NULLIF(stats->'packets'->>'flood_rx','')::double precision AS \"Flood RX\", NULLIF(stats->'packets'->>'direct_rx','')::double precision AS \"Direct RX\" FROM (SELECT stats FROM samples WHERE ts > now() - INTERVAL '10 minutes' ORDER BY ts DESC LIMIT 1) s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flood RX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direct RX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "piechart",
+      "title": "RF transmit composition · since boot",
+      "description": "Flood TX includes Public channel broadcasts. A radio TX counter increase is not proof another node heard it.",
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT NULLIF(stats->'packets'->>'flood_tx','')::double precision AS \"Flood TX\", NULLIF(stats->'packets'->>'direct_tx','')::double precision AS \"Direct TX\" FROM (SELECT stats FROM samples WHERE ts > now() - INTERVAL '10 minutes' ORDER BY ts DESC LIMIT 1) s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flood TX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F5B663"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direct TX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#AA91F7"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
       }
     },
     {
       "id": 12,
-      "type": "timeseries",
-      "title": "Received packet rate (5m)",
+      "type": "row",
+      "title": "02 / SIGNAL & LINK HEALTH",
+      "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 32,
-        "w": 12,
-        "h": 8
+        "y": 22,
+        "w": 24,
+        "h": 1
       },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "meshcore-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "clamp_min(rate(meshcore_radio_rx_packets[5m]),0)",
-          "legendFormat": "RX packets/s"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "pps"
-        },
-        "overrides": []
-      }
+      "panels": []
     },
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Receive error rate (5m)",
+      "title": "Signal environment · noise floor, RSSI and SNR",
+      "description": "RSSI and SNR are the last reported measurements (not an always-current packet). SNR uses the right-hand dB axis when available.",
       "gridPos": {
-        "x": 12,
-        "y": 32,
-        "w": 12,
+        "x": 0,
+        "y": 23,
+        "w": 16,
         "h": 8
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "meshcore-prometheus"
+        "type": "postgres",
+        "uid": "meshcore-postgres"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "clamp_min(rate(meshcore_radio_rx_errors[5m]),0)",
-          "legendFormat": "Errors/s"
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, noise_floor::double precision AS \"Noise floor\", rssi::double precision AS \"Last RSSI\", snr::double precision AS \"Last SNR\" FROM samples WHERE $__timeFilter(ts) ORDER BY ts"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "unit": "dBm",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6BAFFF"
+          },
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 17,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Noise floor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last RSSI"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last SNR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#AA91F7"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "dB"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
       }
     },
     {
       "id": 14,
-      "type": "timeseries",
-      "title": "Radio noise (dBm)",
+      "type": "stat",
+      "title": "RADIO UPTIME",
+      "description": "Reported firmware uptime since last reboot; restarts naturally reset this metric.",
       "gridPos": {
-        "x": 0,
-        "y": 40,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "postgres",
-        "uid": "meshcore-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "time_series",
-          "rawSql": "SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "dBm"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Last RSSI (dBm)",
-      "gridPos": {
-        "x": 12,
-        "y": 40,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "postgres",
-        "uid": "meshcore-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "time_series",
-          "rawSql": "SELECT ts AS time, rssi AS value FROM samples WHERE $__timeFilter(ts) AND rssi IS NOT NULL ORDER BY ts"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "dBm"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Radio uptime (seconds)",
-      "gridPos": {
-        "x": 0,
-        "y": 48,
-        "w": 12,
-        "h": 8
+        "x": 16,
+        "y": 23,
+        "w": 8,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -294,25 +894,48 @@
         {
           "refId": "A",
           "expr": "meshcore_radio_uptime_seconds",
-          "legendFormat": "Uptime"
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AA91F7"
+          },
+          "decimals": 1
         },
         "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
       }
     },
     {
-      "id": 17,
-      "type": "timeseries",
-      "title": "Telemetry age (seconds)",
+      "id": 15,
+      "type": "stat",
+      "title": "TELEMETRY AGE",
+      "description": "Seconds since last radio telemetry sample; stale data can make other current readings unreliable.",
       "gridPos": {
-        "x": 12,
-        "y": 48,
-        "w": 12,
-        "h": 8
+        "x": 16,
+        "y": 27,
+        "w": 8,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -322,81 +945,836 @@
         {
           "refId": "A",
           "expr": "meshcore_radio_telemetry_age_seconds",
-          "legendFormat": "Age"
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "s",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6FDEA7"
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 240
+              }
+            ]
+          }
         },
         "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "RX paths · flood and direct (per interval)",
+      "description": "Reset-aware packet counts per interval from the radio; flood packets can contain non-message traffic.",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH source AS (\n SELECT ts, packets_rx AS rx,\n    packets_tx AS tx,\n    NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS err,\n    NULLIF(stats->'packets'->>'flood_rx', '')::double precision AS flood_rx,\n    NULLIF(stats->'packets'->>'direct_rx', '')::double precision AS direct_rx,\n    NULLIF(stats->'packets'->>'flood_tx', '')::double precision AS flood_tx,\n    NULLIF(stats->'packets'->>'direct_tx', '')::double precision AS direct_tx,\n COALESCE(NULLIF(stats->'core'->>'uptime_secs','')::double precision,uptime) AS radio_uptime\n FROM samples WHERE $__timeFilter(ts)\n), adjacent AS (\n SELECT *, LAG(ts) OVER (ORDER BY ts) AS prior_ts,\n LAG(radio_uptime) OVER (ORDER BY ts) AS prior_uptime,\n LAG(rx) OVER (ORDER BY ts) AS prior_rx,\n    LAG(tx) OVER (ORDER BY ts) AS prior_tx,\n    LAG(err) OVER (ORDER BY ts) AS prior_err,\n    LAG(flood_rx) OVER (ORDER BY ts) AS prior_flood_rx,\n    LAG(direct_rx) OVER (ORDER BY ts) AS prior_direct_rx,\n    LAG(flood_tx) OVER (ORDER BY ts) AS prior_flood_tx,\n    LAG(direct_tx) OVER (ORDER BY ts) AS prior_direct_tx\n FROM source\n), deltas AS (\n SELECT ts,\n CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND rx IS NOT NULL AND prior_rx IS NOT NULL AND rx >= prior_rx THEN rx - prior_rx END AS rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND tx IS NOT NULL AND prior_tx IS NOT NULL AND tx >= prior_tx THEN tx - prior_tx END AS tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND err IS NOT NULL AND prior_err IS NOT NULL AND err >= prior_err THEN err - prior_err END AS err,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_rx IS NOT NULL AND prior_flood_rx IS NOT NULL AND flood_rx >= prior_flood_rx THEN flood_rx - prior_flood_rx END AS flood_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_rx IS NOT NULL AND prior_direct_rx IS NOT NULL AND direct_rx >= prior_direct_rx THEN direct_rx - prior_direct_rx END AS direct_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_tx IS NOT NULL AND prior_flood_tx IS NOT NULL AND flood_tx >= prior_flood_tx THEN flood_tx - prior_flood_tx END AS flood_tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_tx IS NOT NULL AND prior_direct_tx IS NOT NULL AND direct_tx >= prior_direct_tx THEN direct_tx - prior_direct_tx END AS direct_tx\n FROM adjacent\n)\n SELECT $__timeGroupAlias(ts,$__interval),\n SUM(flood_rx)::double precision AS \"Flood RX\",\n SUM(direct_rx)::double precision AS \"Direct RX\"\n FROM deltas GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 75,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flood RX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direct RX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "TX paths · flood and direct (per interval)",
+      "description": "Public-channel test sends should normally increment Flood TX; this does not demonstrate successful reception.",
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH source AS (\n SELECT ts, packets_rx AS rx,\n    packets_tx AS tx,\n    NULLIF(stats->'packets'->>'recv_errors', '')::double precision AS err,\n    NULLIF(stats->'packets'->>'flood_rx', '')::double precision AS flood_rx,\n    NULLIF(stats->'packets'->>'direct_rx', '')::double precision AS direct_rx,\n    NULLIF(stats->'packets'->>'flood_tx', '')::double precision AS flood_tx,\n    NULLIF(stats->'packets'->>'direct_tx', '')::double precision AS direct_tx,\n COALESCE(NULLIF(stats->'core'->>'uptime_secs','')::double precision,uptime) AS radio_uptime\n FROM samples WHERE $__timeFilter(ts)\n), adjacent AS (\n SELECT *, LAG(ts) OVER (ORDER BY ts) AS prior_ts,\n LAG(radio_uptime) OVER (ORDER BY ts) AS prior_uptime,\n LAG(rx) OVER (ORDER BY ts) AS prior_rx,\n    LAG(tx) OVER (ORDER BY ts) AS prior_tx,\n    LAG(err) OVER (ORDER BY ts) AS prior_err,\n    LAG(flood_rx) OVER (ORDER BY ts) AS prior_flood_rx,\n    LAG(direct_rx) OVER (ORDER BY ts) AS prior_direct_rx,\n    LAG(flood_tx) OVER (ORDER BY ts) AS prior_flood_tx,\n    LAG(direct_tx) OVER (ORDER BY ts) AS prior_direct_tx\n FROM source\n), deltas AS (\n SELECT ts,\n CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND rx IS NOT NULL AND prior_rx IS NOT NULL AND rx >= prior_rx THEN rx - prior_rx END AS rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND tx IS NOT NULL AND prior_tx IS NOT NULL AND tx >= prior_tx THEN tx - prior_tx END AS tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND err IS NOT NULL AND prior_err IS NOT NULL AND err >= prior_err THEN err - prior_err END AS err,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_rx IS NOT NULL AND prior_flood_rx IS NOT NULL AND flood_rx >= prior_flood_rx THEN flood_rx - prior_flood_rx END AS flood_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_rx IS NOT NULL AND prior_direct_rx IS NOT NULL AND direct_rx >= prior_direct_rx THEN direct_rx - prior_direct_rx END AS direct_rx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND flood_tx IS NOT NULL AND prior_flood_tx IS NOT NULL AND flood_tx >= prior_flood_tx THEN flood_tx - prior_flood_tx END AS flood_tx,\n    CASE WHEN prior_ts IS NOT NULL AND ts - prior_ts <= INTERVAL '10 minutes' AND (radio_uptime IS NULL OR prior_uptime IS NULL OR radio_uptime >= prior_uptime) AND direct_tx IS NOT NULL AND prior_direct_tx IS NOT NULL AND direct_tx >= prior_direct_tx THEN direct_tx - prior_direct_tx END AS direct_tx\n FROM adjacent\n)\n SELECT $__timeGroupAlias(ts,$__interval),\n SUM(flood_tx)::double precision AS \"Flood TX\",\n SUM(direct_tx)::double precision AS \"Direct TX\"\n FROM deltas GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 75,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flood TX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F5B663"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direct TX"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#AA91F7"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
       }
     },
     {
       "id": 18,
-      "type": "timeseries",
-      "title": "Known contact inventory",
+      "type": "row",
+      "title": "03 / MESSAGING",
+      "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 56,
-        "w": 12,
-        "h": 8
+        "y": 39,
+        "w": 24,
+        "h": 1
       },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "meshcore-prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "meshcore_contacts_known",
-          "legendFormat": "Contacts"
-        },
-        {
-          "refId": "B",
-          "expr": "meshcore_radio_contacts_returned",
-          "legendFormat": "Radio contacts in last sync"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      }
+      "panels": []
     },
     {
       "id": 19,
       "type": "timeseries",
-      "title": "Flood RX vs direct RX",
+      "title": "Message activity · received vs sent",
+      "description": "Only real messages. Outgoing messages represent radio-accepted submissions, not confirmed remote delivery.",
       "gridPos": {
-        "x": 12,
-        "y": 56,
-        "w": 12,
+        "x": 0,
+        "y": 40,
+        "w": 16,
         "h": 8
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "meshcore-prometheus"
+        "type": "postgres",
+        "uid": "meshcore-postgres"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "meshcore_radio_flood_rx",
-          "legendFormat": "Flood"
-        },
-        {
-          "refId": "B",
-          "expr": "meshcore_radio_direct_rx",
-          "legendFormat": "Direct"
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(ts,$__interval),\n COUNT(*) FILTER (WHERE direction='in')::double precision AS \"Received\",\n COUNT(*) FILTER (WHERE direction='out')::double precision AS \"Sent attempts\"\n FROM messages WHERE $__timeFilter(ts) AND COALESCE(meta->>'simulated','false') <> 'true'\n GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 78,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Received"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sent attempts"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F5B663"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "barchart",
+      "title": "Most active channels & direct traffic",
+      "description": "Message record counts within the selected time range, grouped by channel or direct conversation.",
+      "gridPos": {
+        "x": 16,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN kind='direct' THEN 'Direct' ELSE 'Channel #' || target END AS \"Destination\",\n COUNT(*)::double precision AS \"Messages\"\n FROM messages WHERE $__timeFilter(ts) AND COALESCE(meta->>'simulated','false') <> 'true'\n GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AA91F7"
+          },
+          "decimals": 0,
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none"
+          }
         },
         "overrides": []
+      },
+      "options": {
+        "xField": "Destination",
+        "orientation": "horizontal",
+        "barWidth": 0.72,
+        "groupWidth": 0.72,
+        "showValue": "always",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "showLegend": false
+        },
+        "xTickLabelRotation": 0
+      }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Recent real messages · latest 20",
+      "description": "Messages stored in PostgreSQL. Radio-accepted outgoing messages are not delivery receipts.",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS \"Time\", CASE WHEN direction='in' THEN 'Received' ELSE 'Outgoing' END AS \"Direction\",\n CASE WHEN kind='channel' THEN 'Ch #' || target ELSE 'Direct' END AS \"Route\",\n COALESCE(NULLIF(sender,''),'Unknown') AS \"Sender\",\n LEFT(REPLACE(body,E'\\n',' '),140) AS \"Message\",status AS \"Status\"\n FROM messages WHERE $__timeFilter(ts) AND COALESCE(meta->>'simulated','false') <> 'true' ORDER BY ts DESC LIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#94A8C0"
+          },
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": []
+      }
+    },
+    {
+      "id": 22,
+      "type": "piechart",
+      "title": "Message outcomes · all time",
+      "description": "All-time real message record states; Channel sent means accepted by radio, not received remotely.",
+      "gridPos": {
+        "x": 16,
+        "y": 48,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n COUNT(*) FILTER (WHERE direction='in')::double precision AS \"Received\",\n COUNT(*) FILTER (WHERE direction='out' AND status='sent')::double precision AS \"Channel sent\",\n COUNT(*) FILTER (WHERE direction='out' AND status IN ('sent_unconfirmed','queued','running'))::double precision AS \"Direct pending\",\n COUNT(*) FILTER (WHERE direction='out' AND status='acknowledged')::double precision AS \"Acknowledged\",\n COUNT(*) FILTER (WHERE direction='out' AND status IN ('failed','error'))::double precision AS \"Failed\"\n FROM messages WHERE COALESCE(meta->>'simulated','false') <> 'true'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#30D7C7"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Received"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Channel sent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direct pending"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F5B663"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Acknowledged"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6FDEA7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F17B8A"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "04 / NODES & RF EVENT LOG",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 24,
+      "type": "barchart",
+      "title": "Known nodes · by role",
+      "description": "Saved radio-discovered contacts only. This is not a count of RF packets.",
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE role\n WHEN 'client' THEN 'Companion'\n WHEN 'repeater' THEN 'Repeater'\n WHEN 'room_server' THEN 'Room server'\n WHEN 'sensor' THEN 'Sensor'\n ELSE 'Unknown' END AS \"Node type\",\n COUNT(*)::double precision AS \"Nodes\"\n FROM contacts WHERE COALESCE(detail->>'simulated','false') <> 'true'\n GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6BAFFF"
+          },
+          "decimals": 0,
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "Node type",
+        "orientation": "horizontal",
+        "barWidth": 0.72,
+        "groupWidth": 0.72,
+        "showValue": "always",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "showLegend": false
+        },
+        "xTickLabelRotation": 0
+      }
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Latest known contacts",
+      "description": "Last observed is based on reported advertisements; a contact refresh alone is not a new RF observation.",
+      "gridPos": {
+        "x": 8,
+        "y": 57,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT LEFT(name,48) AS \"Node\", CASE role\n WHEN 'client' THEN 'Companion' WHEN 'repeater' THEN 'Repeater'\n WHEN 'room_server' THEN 'Room server' WHEN 'sensor' THEN 'Sensor' ELSE 'Unknown' END AS \"Type\",\n last_seen AS \"Last observed\",first_seen AS \"First recorded\",\n LEFT(public_key,14) AS \"Public key prefix\"\n FROM contacts WHERE COALESCE(detail->>'simulated','false') <> 'true'\n ORDER BY last_seen DESC NULLS LAST LIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#94A8C0"
+          },
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Type"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Companion": {
+                        "text": "● Companion",
+                        "color": "#6BAFFF"
+                      },
+                      "Repeater": {
+                        "text": "◆ Repeater",
+                        "color": "#F5B663"
+                      },
+                      "Room server": {
+                        "text": "■ Room server",
+                        "color": "#AA91F7"
+                      },
+                      "Sensor": {
+                        "text": "▲ Sensor",
+                        "color": "#30D7C7"
+                      },
+                      "Unknown": {
+                        "text": "○ Unknown",
+                        "color": "#94A8C0"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": []
+      }
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "Latest RX activity · decoded events vs counters",
+      "description": "Counter intervals are aggregate radio statistics, not individual frames. Identified events appear only when the firmware/SDK exposes them.",
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS \"Time\",\n CASE kind\n WHEN 'channel' THEN 'Channel decoded' WHEN 'direct' THEN 'Direct decoded'\n WHEN 'advert' THEN 'Advertisement' WHEN 'new_contact' THEN 'New contact'\n WHEN 'counter_delta' THEN 'Counter interval' WHEN 'counter_reset' THEN 'Counter reset'\n ELSE kind END AS \"Event\",\n CASE WHEN channel IS NULL THEN '—' ELSE 'Ch #' || channel END AS \"Channel\",\n NULLIF(source,'') AS \"Source\",\n count AS \"RX packets (interval)\",errors AS \"RX errors (interval)\",\n rssi AS \"RSSI\",snr AS \"SNR\"\n FROM rx_activity ORDER BY ts DESC LIMIT 25"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#94A8C0"
+          },
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": []
       }
     }
-  ]
+  ],
+  "description": "Focused RF operations dashboard for USB-powered T114. Real messages only; reset-aware packet deltas and separate decoded RX events.",
+  "editable": false,
+  "graphTooltip": 1,
+  "style": "dark",
+  "links": []
 }

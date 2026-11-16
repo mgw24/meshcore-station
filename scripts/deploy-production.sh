@@ -13,7 +13,8 @@ rm -f -- scripts/switch-to-radio.sh requirements-dev.txt .github/workflows/tests
 sed -i '/^SIMULATION=/d' .env
 [ -n "$(grep '^RADIO_POWER_SOURCE=' .env || true)" ] || echo 'RADIO_POWER_SOURCE=usb' >> .env
 chmod 0600 .env
+./scripts/enable-digests.sh
 docker compose config --quiet
-docker compose up -d --build --remove-orphans db api collector grafana prometheus
+docker compose up -d --build --remove-orphans db api collector digest grafana prometheus
 docker compose ps
 printf '\nLive services started. Preview legacy data: sudo ./scripts/remove-simulation-data.sh --preview\n'

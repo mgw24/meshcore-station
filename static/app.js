@@ -17,7 +17,7 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book',digest:'Email Digests'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
@@ -237,3 +237,67 @@ $('contacts-table').addEventListener('click',async e=>{
  if(existing){fillAddress(existing);navigate('address');return}
  resetAddress();$('address-name').value=found.name;$('address-key').value=found.key;navigate('address');
 });
+
+// v5: SMTP digest settings are independent of the radio serial connection.
+let digestSettingsLoaded=false;
+function digestFormData(){
+  const data={enabled:$('digest-enabled').checked,frequency:$('digest-frequency').value,
+    send_time:$('digest-time').value,weekday:Number($('digest-weekday').value),
+    timezone:$('digest-timezone').value.trim(),
+    smtp_host:$('digest-host').value.trim(),smtp_port:Number($('digest-port').value),
+    smtp_security:$('digest-security').value,smtp_username:$('digest-username').value.trim(),
+    smtp_password:$('digest-password').value||null,clear_password:$('digest-clear-password').checked,
+    mail_from:$('digest-from').value.trim(),mail_to:$('digest-recipients').value.trim(),
+    message_limit:Number($('digest-limit').value)};
+  for(const sec of ['received','sent','radio','alerts','nodes','rx'])data['include_'+sec]=$('digest-section-'+sec).checked;
+  return data;
+}
+async function loadDigest(){
+  try{
+    const x=await request('/api/digest/settings');digestSettingsLoaded=true;
+    for(const [field,id] of Object.entries({enabled:'digest-enabled',frequency:'digest-frequency',
+      send_time:'digest-time',weekday:'digest-weekday',timezone:'digest-timezone',
+      smtp_host:'digest-host',smtp_port:'digest-port',smtp_security:'digest-security',
+      smtp_username:'digest-username',mail_from:'digest-from',mail_to:'digest-recipients',
+      message_limit:'digest-limit'})){
+      if($(id).type==='checkbox')$(id).checked=!!x[field];else $(id).value=x[field]??'';
+    }
+    for(const sec of ['received','sent','radio','alerts','nodes','rx'])$('digest-section-'+sec).checked=!!x['include_'+sec];
+    $('digest-password').value='';$('digest-clear-password').checked=false;
+    $('digest-password-state').textContent=x.password_configured?'An SMTP password is saved (encrypted). Leave blank to retain it.':'No SMTP password saved.';
+    $('digest-worker-status').textContent=x.worker_online?'● Scheduler online':'● Scheduler offline';
+    $('digest-worker-status').className='pill '+(x.worker_online?'':'red');
+    $('digest-next').textContent=x.enabled?(x.next_due?'Next scheduled delivery: '+dt(x.next_due):'Next delivery not yet calculated'):'Scheduled digests disabled';
+    await refreshDigestHistory();
+  }catch(e){toast('Could not load digest settings: '+e.message,true)}
+}
+async function refreshDigestHistory(){
+  if(S.page!=='digest')return;
+  try{
+    const rows=await request('/api/digest/history');
+    $('digest-history').innerHTML=rows.length?rows.map(r=>`<tr><td>${H(dt(r.created_at))}</td><td>${H(r.kind)}</td><td>${H(r.status)}</td><td>${H(r.error||((r.status==='sent')?`${r.recipient_count} recipients · ${r.message_count} messages`:'—'))}</td></tr>`).join(''):'<tr><td colspan="4">No deliveries yet</td></tr>';
+  }catch(e){toast(e.message,true)}
+}
+$('digest-settings-form').addEventListener('submit',async e=>{
+  e.preventDefault();const button=e.submitter;button.disabled=true;
+  try{
+    const res=await request('/api/digest/settings',{method:'PUT',body:JSON.stringify(digestFormData())});
+    toast('Digest settings saved');await loadDigest();
+  }catch(e){toast(e.message,true)}finally{button.disabled=false}
+});
+$('digest-preview-btn').addEventListener('click',async()=>{
+  try{const res=await request('/api/digest/preview');$('digest-preview').textContent=res.text;toast('Report preview refreshed')}
+  catch(e){toast(e.message,true)}
+});
+$('digest-refresh-btn').addEventListener('click',refreshDigestHistory);
+$('digest-test-btn').addEventListener('click',async()=>{
+  if(!confirm('Send an SMTP connectivity test to your saved recipients?'))return;
+  try{const res=await request('/api/digest/send-test',{method:'POST'});toast('Test email queued (#'+res.id+'). Check delivery history.');await refreshDigestHistory()}
+  catch(e){toast(e.message,true)}
+});
+$('digest-now-btn').addEventListener('click',async()=>{
+  if(!confirm('Send a report that may include private MeshCore messages to all configured recipients?'))return;
+  try{const res=await request('/api/digest/send-now',{method:'POST'});toast('Digest queued (#'+res.id+'). Check delivery history.');await refreshDigestHistory()}
+  catch(e){toast(e.message,true)}
+});
+setInterval(()=>{if(S.csrf&&S.page==='digest')refreshDigestHistory()},15000);

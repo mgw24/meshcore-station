@@ -1,8 +1,20 @@
-# MeshCore Station — Production Edition v3
+# MeshCore Station — Production Edition v5
 
 GitHub source: **https://github.com/mgw24/meshcore-station**
 
 Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 LTS Minimal on VMware vSphere / ESXi**. The T114 is permanently attached to the ESXi host with USB passthrough. Access is provided over the existing VPN; no Tailscale component is included.
+
+## v5: Scheduled email digests + Grafana operations refresh
+
+The station now has an **Email Digests** web page and a separate SMTP scheduler container.
+Configure recipients, mail server, TLS security, daily/twice-daily/weekly schedule,
+local timezone, message/radio/alert/node sections, and the report limit entirely
+through the browser. Preview and test before enabling automatic delivery.
+**The scheduler is disabled by default.** See [V5-RELEASE-NOTES.md](V5-RELEASE-NOTES.md)
+and [V5-COMBINED-RELEASE.md](V5-COMBINED-RELEASE.md)
+for the single-package, non-destructive upgrade instructions. v4 radio, map, address book,
+channels and firmware manager are retained. The Grafana dashboard is upgraded
+to an operations-oriented layout with reset-aware radio metrics.
 
 ## What's included
 
@@ -17,7 +29,10 @@ Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 L
 
 **Important:** This is a community-built reference implementation, not an official MeshCore product. Python/API and browser checks have been run, but the new channel-write, map and firmware workflows require verification on your actual VM and T114 before relying on them. Your earlier tests confirmed real RF reception and a working serial radio connection, not end-to-end delivery of every channel message.
 
-## Upgrading the existing installation
+## Historical v3 upgrade instructions (for reference only)
+
+For upgrading **from v4 to v5**, use the new [v5 release notes](V5-RELEASE-NOTES.md). The older instructions below concern the initial v3 production migration and should not be followed for a v5 upgrade.
+
 
 **Keep the existing `.env`, `runtime/`, Docker volumes, and T114 Companion firmware.** Do **not** remove the PostgreSQL Docker volume or run `docker compose down -v`.
 
@@ -132,7 +147,7 @@ Firmware upload → protected spool → Ubuntu systemd host firmware agent
                                     (stops collector before Nordic serial DFU)
 ```
 
-**Firmware caveat:** ESXi can detach the radio when DFU changes its USB identity. Successful unattended flashing cannot be guaranteed until confirmed on your hardware. Keep a Mac UF2 recovery path available.
+**Firmware caveat:** ESXi can detach the radio when DFU changes its USB identity. Successful unattended flashing cannot be guaranteed until confirmed on your hardware. Keep a compatible computer and a UF2 recovery procedure available.
 
 ## Useful maintenance
 

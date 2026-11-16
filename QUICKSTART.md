@@ -1,3 +1,5 @@
+> **Existing v4 installation?** Use [V5-COMBINED-RELEASE.md](V5-COMBINED-RELEASE.md) to upgrade email digests and Grafana in one operation.
+
 # MeshCore Station v3 — Upgrade checklist
 
 Source: https://github.com/mgw24/meshcore-station
@@ -37,3 +39,10 @@ Open the station at `http://VM-IP:8088`; Grafana remains at `http://VM-IP:3300`.
 Check **Radio Health**, **Channels**, **Nodes & Contacts**, **Node Map**, **Messages**, and **Grafana**. Hard refresh Firefox after deploying. Mobile layout works over the existing VPN; no Tailscale is required. In the map, no coordinates means no plotted node, even if RX packets are increasing.
 
 To publish the code to GitHub, extract the ZIP into your **cloned GitHub working copy**, review changed files, and commit/push to `https://github.com/mgw24/meshcore-station`. See the full README for commands. The package does not automatically push or overwrite your GitHub repository.
+
+## Email digests (v5)
+
+Upgrade safely using the instructions in `V5-RELEASE-NOTES.md`. Enable the
+SMTP encryption key with `sudo ./scripts/enable-digests.sh`, start the `digest`
+container, then open **Email Digests** in the web interface. Configure SMTP
+and send a test email before enabling the schedule. Leave `.env` out of Git.
