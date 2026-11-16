@@ -23,6 +23,8 @@ def packet_detail(sample):
         'tx': metric(packets, 'sent') if metric(packets, 'sent') is not None else sample.packets_tx,
         'rx_errors': metric(packets, 'recv_errors'),
         'flood_rx': metric(packets, 'flood_rx'),
+        'flood_tx': metric(packets, 'flood_tx'),
+        'direct_tx': metric(packets, 'direct_tx'),
         'direct_rx': metric(packets, 'direct_rx'),
         'rx_air_secs': metric(radio, 'rx_air_secs'),
         'tx_air_secs': metric(radio, 'tx_air_secs'),

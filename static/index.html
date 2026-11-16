@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=3"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=4"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -15,6 +15,7 @@
     <button class="nav active" data-view="overview">▣ <span>Overview</span></button>
     <button class="nav" data-view="messages">◫ <span>Messages</span></button>
     <button class="nav" data-view="nodes">⟠ <span>Nodes & Contacts</span></button>
+    <button class="nav" data-view="address">♧ <span>Address Book</span></button>
     <button class="nav" data-view="map">◎ <span>Node Map</span></button>
     <button class="nav" data-view="health">◉ <span>Radio Health</span></button>
     <button class="nav" data-view="telemetry">⌁ <span>Telemetry</span></button>
@@ -46,7 +47,27 @@
   <label>Message<textarea id="message-text" rows="5" maxlength="180" placeholder="Type a short radio message…" required></textarea></label>
   <div class="form-row"><span id="char-count" class="muted">0 / 180</span><button class="button primary" type="submit">Transmit ↗</button></div><p class="hint">Direct sends are initially marked “sent/unconfirmed” until acknowledged. Channel messages do not have a direct-message ACK.</p>
   </form></article><article class="panel"><div class="panel-head"><h2>Message history</h2><a href="/api/export/messages.csv" id="export-messages" class="subtle">Export CSV ↓</a></div><div id="all-messages" class="stream tall"></div></article></div></section>
-<section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><p id="contact-sync-summary" class="hint">Waiting for contact sync</p><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
+<section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><p id="contact-sync-summary" class="hint">Waiting for contact sync</p><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th><th>ADDRESS BOOK</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
+<section id="view-address" class="view" hidden>
+ <div class="two-col messaging-grid">
+  <article class="panel"><div class="panel-head"><div><span class="eyebrow">SAVED LOCALLY</span><h2>Address book</h2></div></div>
+   <label>Find a contact<input type="search" id="address-search" placeholder="Search nicknames, tags, keys…"></label>
+   <div id="address-entries" class="address-list" aria-live="polite"></div>
+   <p class="hint">Your nicknames and notes are stored in PostgreSQL, independently of the radio contact list. Direct messaging requires the identity to be known to the T114.</p>
+  </article>
+  <article class="panel"><div class="panel-head"><h2 id="address-form-heading">Save contact</h2><button class="subtle" id="address-reset" type="button">New entry</button></div>
+   <form id="address-form">
+    <input id="address-id" type="hidden">
+    <label>Nickname<input id="address-name" maxlength="100" required placeholder="e.g. HamHock"></label>
+    <label>MeshCore public key (optional)<input id="address-key" maxlength="64" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="64 hexadecimal characters"></label>
+    <label>Tags<input id="address-tags" maxlength="240" placeholder="Local, repeater, friend"></label>
+    <label>Notes<textarea id="address-notes" rows="4" maxlength="4000" placeholder="Location, observations, contact details…"></textarea></label>
+    <label class="check-label"><input id="address-favorite" type="checkbox"> Favorite</label>
+    <div class="actions"><button class="button primary" type="submit">Save contact</button><button class="button danger" id="address-delete" type="button" hidden>Delete</button><button class="button secondary" id="address-message" type="button" hidden>Direct message ↗</button></div>
+   </form>
+  </article>
+ </div>
+</section>
 <section id="view-health" class="view" hidden>
  <div class="kpis health-kpis">
   <article class="kpi"><span class="eyebrow">VALID RX PACKETS</span><b id="health-rx">—</b><small>Since device boot</small></article>
@@ -54,9 +75,12 @@
   <article class="kpi"><span class="eyebrow">RX ERRORS / CRC</span><b id="health-errors">—</b><small>Since device boot</small></article>
   <article class="kpi"><span class="eyebrow">TELEMETRY AGE</span><b id="health-age">—</b><small id="health-freshness">Last recorded sample</small></article>
  </div>
- <div class="two-col"><article class="panel"><div class="panel-head"><h2>Packets received / transmitted</h2><span class="legend">Live hardware counters</span></div><div id="health-rx-chart" class="chart"></div><div id="health-tx-chart" class="chart"></div></article>
+ <div class="two-col"><article class="panel"><div class="panel-head"><h2>Packets received / transmitted</h2><span class="legend">Live hardware counters</span></div><div id="health-rx-chart" class="chart"></div><div id="health-tx-chart" class="chart"></div><p id="health-tx-note" class="hint">Waiting for TX statistics.</p></article>
  <article class="panel"><div class="panel-head"><h2>Receive error history</h2></div><div id="health-error-chart" class="chart"></div><p class="hint">Counters can reset when the T114 reboots. RF packets include advertisements and repeater traffic, not only messages.</p></article></div>
  <article class="panel"><div class="panel-head"><h2>Radio diagnostics</h2></div><div id="health-details" class="health-details" aria-live="polite"></div></article>
+ <article class="panel"><div class="panel-head"><div><span class="eyebrow">LIVE RADIO</span><h2>RX activity log</h2></div><div class="actions"><label class="rx-filter">Show<select id="rx-filter"><option value="">All activity</option><option value="channel">Channel messages</option><option value="direct">Direct messages</option><option value="advert">Advertisements</option><option value="rx_log">RF log data</option><option value="counter_delta">Packet counter changes</option><option value="counter_reset">Counter resets</option></select></label></div></div>
+ <p class="hint">Decoded receive events appear individually when supplied by the firmware. Counter changes are sampled roughly once per minute; they do not identify individual packets, senders, or exact reception times. Raw packet contents and channel secrets are never stored in this log.</p>
+ <div id="health-rx-log" class="rx-log" aria-live="polite"></div></article>
 </section>
 <section id="view-telemetry" class="view" hidden><div class="two-col"><article class="panel" id="battery-panel"><div class="panel-head"><h2>Battery history</h2></div><div id="battery-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Noise floor history</h2></div><div id="noise-chart" class="chart"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Packet counters (RX)</h2></div><div id="rx-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Last packet RSSI (dBm)</h2></div><div id="rssi-chart" class="chart"></div></article></div><article class="panel"><div class="panel-head"><h2>Detailed statistics</h2></div><div id="telemetry-info" class="text-block"></div></article></section>
 <section id="view-map" class="view" hidden>
@@ -92,4 +116,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=3"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=4"></script></body></html>

@@ -147,3 +147,14 @@ sudo ./scripts/remove-simulation-data.sh --preview
 ```
 
 See `QUICKSTART.md` for the shorter upgrade checklist.
+
+
+## v4 interface / RX observability and address book
+
+- Address Book is a separate PostgreSQL table (`address_book`). Entries, tags, favorite flags and notes persist even if the T114 loses its radio contact list. Manual entries without a public key can be stored; direct sends require a valid full MeshCore public key **already known to the radio**.
+- Radio Health → RX Activity shows decoded SDK events (including RX_LOG_DATA when available), and *separately labeled* RX counter changes at the 60-second telemetry interval. Counts are not individual packets, do not imply decoded chat, and aren't assigned fabricated senders or signal strengths. Raw packet bytes and private keys are not stored in `rx_activity`.
+- RX log retention: 7 days, capped at 50,000 latest entries and pruned on the collector during normal operation. CPU/storage load depends on event rate; do not enable unbounded raw logging.
+- New tables are created by SQLAlchemy `Base.metadata.create_all` on the API and collector startup; no existing table is dropped or rewritten. Before deploying, back up the database with `sudo ./scripts/backup.sh`.
+- This overlay includes the preceding v4 sender-name and role-icon UI patch. It does not change RF parameters, set transmit power, or modify installed channel secrets.
+- Two service rebuild: `sudo docker compose up -d --build --no-deps api collector`. When rolling back, restore source and restart both services; new tables can safely remain for later use.
+- UI status `Radio accepted · delivery unconfirmed` is not a receive acknowledgment from another user or repeater.

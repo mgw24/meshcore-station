@@ -1,6 +1,6 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
-const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, status:null};
+const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], status:null};
 const H = (v) => String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dt = (v) => v ? new Date(v).toLocaleString() : '—';
 const short = (v,n=18) => String(v||'').length>n ? String(v).slice(0,n)+'…' : String(v||'');
@@ -17,8 +17,15 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
+function nodeStyle(role){
+  const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
+  return ({repeater:['repeater','↗','Repeater'],client:['client','●','Companion'],room_server:['room_server','▣','Room server'],sensor:['sensor','◆','Sensor']})[roleKey]||['unknown','?','Unknown'];
+}
+function nodeTag(role){const [css,icon,label]=nodeStyle(role);return `<span class="node-tag ${css}"><span aria-hidden="true">${icon}</span> ${H(label)}</span>`}
+function messageStatus(v){return ({sent:'Radio accepted · delivery unconfirmed',sent_unconfirmed:'Radio accepted · delivery unconfirmed',acknowledged:'Acknowledged',simulated:'Simulated'})[v]||String(v||'')}
+function messageHeading(m){const node=(m.direction==='out')?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'Local node'):(m.sender||'Unknown');return `${m.kind==='channel'?'#'+m.target:'Direct'} · ${m.direction==='in'?'Received':'Sent'} · ${node}`}
 function item(title,body,time,dot=''){return `<div class="stream-item"><span class="dot ${H(dot)}"></span><div class="stream-main"><div class="stream-head"><div class="stream-title">${H(title)}</div><time class="stream-time">${H(dt(time))}</time></div><div class="stream-body">${H(body)}</div></div></div>`}
 function plot(element, values, key, unit){
   const target=$(element), list=values.filter(x=>typeof x[key]==='number' && Number.isFinite(x[key]));
@@ -33,10 +40,10 @@ function plot(element, values, key, unit){
 function fillDestinations(){let old=$('destination').value;const channels=(S.status?.channels?.length?S.status.channels:Array.from({length:8},(_,i)=>({index:i,name:'Channel '+i})));$('destination').innerHTML=channels.map(c=>`<option value="channel:${c.index}">${H(c.name)} (#${c.index})</option>`).join('')+S.contacts.map(x=>`<option value="${H(x.key)}">${H(x.name)} (${H(short(x.key,12))})</option>`).join('');if([...$('destination').options].some(o=>o.value===old))$('destination').value=old}
 function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  const st=S.status, radio=st.radio||{};$('mode-badge').textContent='USB SERIAL';$('mode-badge').className='pill';$('connection-badge').textContent=radio.connected?'● Connected':'● Offline';$('connection-badge').className='pill '+(radio.connected?'':'red');$('kpi-radio').textContent=radio.connected?'Online':'Offline';$('kpi-device').textContent=radio.error||radio.device||'Awaiting device';$('kpi-nodes').textContent=st.counts.contacts;const sync=st.contact_sync||{};const syncText=typeof sync.radio_contacts==='number'?`${sync.radio_contacts} on radio · +${sync.new_in_sync||0} new at last sync`:'Awaiting radio contact sync';$('nodes-kpi-detail').textContent=syncText;$('contact-sync-summary').textContent=`${syncText}${sync.sync_at?' · '+dt(sync.sync_at):''}. RX packets do not increase this count automatically.`;$('kpi-messages').textContent=st.counts.messages;$('power-title').textContent=st.power_source==='usb'?'POWER SOURCE':'BATTERY';$('kpi-battery').textContent=st.power_source==='usb'?'USB Powered':(st.sample?.battery_pct!=null ? st.sample.battery_pct.toFixed(0)+'%' : '—');$('kpi-battery').style.fontSize=st.power_source==='usb'?'1.35rem':'';$('power-caption').textContent=st.power_source==='usb'?'No battery installed':'Most recent telemetry';$('battery-panel').hidden=st.power_source==='usb';
- const rec=S.messages.slice(0,7);$('recent-messages').innerHTML=rec.length?rec.map(m=>item(m.kind==='channel'?`#${m.target} · ${m.direction==='in'?'Received':'Sent'}`:`${m.direction==='in'?'From':'To'} ${short(m.direction==='in'?m.sender:m.target)}`,m.text,m.ts,m.direction)).join(''):empty('No messages yet');
- $('all-messages').innerHTML=S.messages.length?S.messages.map(m=>item(`${m.kind==='channel'?'#'+m.target:short(m.direction==='in'?m.sender:m.target,35)} · ${m.direction==='in'?'Incoming':'Outgoing'}`,`${m.text} · ${m.status}`,m.ts,m.direction)).join(''):empty('No messages yet');
- $('recent-nodes').innerHTML=S.contacts.length?S.contacts.slice(0,6).map(n=>item(n.name,`${n.role} · ${short(n.key,36)}`,n.last_seen)).join(''):empty('No contacts discovered');
- $('contacts-table').innerHTML=S.contacts.length?S.contacts.map(n=>`<tr><td>${H(n.name)}</td><td>${H(n.role)}</td><td><code title="${H(n.key)}">${H(short(n.key,40))}</code></td><td>${H(dt(n.last_seen))}</td></tr>`).join(''):`<tr><td colspan="4">No contacts discovered yet</td></tr>`;
+ const rec=S.messages.slice(0,7);$('recent-messages').innerHTML=rec.length?rec.map(m=>item(messageHeading(m),m.text,m.ts,m.direction)).join(''):empty('No messages yet');
+ $('all-messages').innerHTML=S.messages.length?S.messages.map(m=>item(messageHeading(m),`${m.text} · ${messageStatus(m.status)}`,m.ts,m.direction)).join(''):empty('No messages yet');
+ $('recent-nodes').innerHTML=S.contacts.length?S.contacts.slice(0,6).map(n=>`<div class="node-row">${nodeTag(n.role)}${item(n.name,short(n.key,36),n.last_seen)}</div>`).join(''):empty('No contacts discovered');
+ $('contacts-table').innerHTML=S.contacts.length?S.contacts.map(n=>`<tr><td>${H(n.name)}</td><td>${nodeTag(n.role)}</td><td><code title="${H(n.key)}">${H(short(n.key,40))}</code></td><td>${H(dt(n.last_seen))}</td><td><button class="subtle" type="button" data-save-contact="${H(n.key)}">Save ↗</button></td></tr>`).join(''):`<tr><td colspan="5">No contacts discovered yet</td></tr>`;
  $('recent-alerts').innerHTML=S.alerts.filter(a=>!a.resolved).length?S.alerts.filter(a=>!a.resolved).slice(0,5).map(a=>item(a.severity.toUpperCase(),a.message,a.ts,'danger')).join(''):empty('No active alerts');
  $('all-alerts').innerHTML=S.alerts.length?S.alerts.map(a=>`<div class="stream-item"><span class="dot ${a.resolved?'':'danger'}"></span><div class="stream-main"><div class="stream-head"><b>${H(a.severity.toUpperCase())}</b><span class="stream-time">${H(dt(a.ts))}</span></div><p class="stream-body">${H(a.message)}</p></div>${a.resolved?'<span class="pill">Resolved</span>':`<button class="button secondary" data-resolve="${a.id}">Resolve</button>`}</div>`).join(''):empty('No alerts');
  $('event-list').innerHTML=S.events.length?S.events.map(e=>item(e.kind,JSON.stringify(e.detail),e.ts)).join(''):empty('No radio events');
@@ -47,8 +54,8 @@ function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
 }
 let loading=false;
 async function refresh(){if(!S.csrf || loading)return;loading=true;try{
-  const [st,contacts,msg,events,alerts,hist,jobs,mapNodes,health,channels]=await Promise.all([request('/api/status'),request('/api/contacts'),request('/api/messages?limit=300'),request('/api/events?limit=100'),request('/api/alerts'),request('/api/history?hours=24'),request('/api/firmware/jobs'),request('/api/map/nodes'),request('/api/radio/health'),request('/api/channels')]);
-  Object.assign(S,{status:st,contacts,messages:msg,events,alerts,history:hist,jobs,mapNodes,health,channels});render();renderHealth();renderChannels();if(S.page==='map')updateMap();
+  const [st,contacts,msg,events,alerts,hist,jobs,mapNodes,health,channels,addressBook,rxLog]=await Promise.all([request('/api/status'),request('/api/contacts'),request('/api/messages?limit=300'),request('/api/events?limit=100'),request('/api/alerts'),request('/api/history?hours=24'),request('/api/firmware/jobs'),request('/api/map/nodes'),request('/api/radio/health'),request('/api/channels'),request('/api/address-book'),request('/api/radio/rx-log?limit=150')]);
+  Object.assign(S,{status:st,contacts,messages:msg,events,alerts,history:hist,jobs,mapNodes,health,channels,addressBook,rxLog});render();renderHealth();renderChannels();renderAddressBook();renderRxLog();if(S.page==='map')updateMap();
 }catch(e){toast(e.message,true)}finally{loading=false}}
 async function enqueue(payload){const x=await request('/api/commands',{method:'POST',body:JSON.stringify(payload)});toast('Command queued #'+x.id);const deadline=Date.now()+20000;while(Date.now()<deadline){await new Promise(r=>setTimeout(r,1200));let y=await request('/api/commands/'+x.id);if(y.state==='failed')throw Error(y.error);if(y.state==='complete'){toast('Radio command accepted');await refresh();return y}}
  toast('Command queued. Check activity for results.')}
@@ -107,9 +114,9 @@ function mapPaint(force=false){const el=$('map-canvas');if(S.page!=='map'||!el||
  const pins=document.createDocumentFragment();
  for(const n of nodes){const coords=geoWorld(n.location.lat,n.location.lon,z),px=coords.x-center.x+w/2,py=coords.y-center.y+h/2;
   if(px<-50||px>w+50||py<-50||py>h+50)continue;
-  const b=document.createElement('button');b.className='map-pin '+(n.role==='repeater'?'repeater':'');b.type='button';
+  const [roleClass,roleIcon]=nodeStyle(n.role);const b=document.createElement('button');b.className='map-pin '+roleClass;b.type='button';
   b.style.left=px+'px';b.style.top=py+'px';
-  b.textContent=n.role==='repeater'?'R':'●';b.title=`${n.name} (${n.role}) · ${n.location.source} location`;
+  b.textContent=roleIcon;b.title=`${n.name} (${n.role}) · ${n.location.source} location`;
   b.setAttribute('aria-label',b.title);b.addEventListener('click',e=>{e.stopPropagation();toast(b.title)});pins.appendChild(b)
  }
  $('map-pins').replaceChildren(pins);
@@ -117,7 +124,7 @@ function mapPaint(force=false){const el=$('map-canvas');if(S.page!=='map'||!el||
 function updateMap(){
  const nodes=S.mapNodes||[],positioned=nodes.filter(n=>n.location),unmapped=nodes.filter(n=>!n.location);
  $('map-summary').textContent=`${positioned.length} plotted · ${unmapped.length} without coordinates · ${nodes.filter(n=>n.role==='repeater').length} repeaters in radio contacts. RX packet counts are not node counts.`;
- $('map-unmapped').innerHTML=unmapped.length?unmapped.map(n=>item(n.name,`${n.role} · Coordinates not advertised`,n.last_seen)).join(''):empty('No unmapped contacts.');
+ $('map-unmapped').innerHTML=unmapped.length?unmapped.map(n=>`<div class="node-row">${nodeTag(n.role)}${item(n.name,'Coordinates not advertised',n.last_seen)}</div>`).join(''):empty('No unmapped contacts.');
  const el=$('map-contact'),prior=el.value;
  const selections=nodes.map(n=>`<option value="${H(n.key)}">${H(n.name)} (${H(n.role)})</option>`).join('');
  if(el.innerHTML!==selections){el.innerHTML=selections;if(nodes.some(n=>n.key===prior))el.value=prior}
@@ -149,8 +156,9 @@ function renderHealth(){const h=S.health;if(!h)return;
  $('health-rx').textContent=show(d.rx);$('health-tx').textContent=show(d.tx);$('health-errors').textContent=show(d.rx_errors);
  $('health-age').textContent=typeof h.sample_age_secs==='number'?`${h.sample_age_secs}s`:'—';
  $('health-freshness').textContent=h.sample_fresh?'Recent telemetry':'Telemetry delayed/stale';
- $('health-details').innerHTML=[['Collector',h.connected?'Connected':'Disconnected'],['Power','USB (no battery)'],['Radio uptime',show(d.uptime_secs)+' s'],['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['RX airtime',show(d.rx_air_secs)+' s'],['TX airtime',show(d.tx_air_secs)+' s'],['Noise floor',show(d.noise_floor)+' dBm'],['Last RSSI',show(d.rssi)+' dBm'],['Receive errors',show(d.rx_errors)],['New RX since last sample',show(h.deltas?.rx)],['New RX errors since last sample',show(h.deltas?.rx_errors)]].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
- plot('health-rx-chart',S.history,'packets_rx','packets');plot('health-tx-chart',S.history,'packets_tx','packets');plot('health-error-chart',S.history,'rx_errors','errors');
+ $('health-details').innerHTML=[['Collector',h.connected?'Connected':'Disconnected'],['Power','USB (no battery)'],['Radio uptime',show(d.uptime_secs)+' s'],['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['Flood TX',show(d.flood_tx)],['Direct TX',show(d.direct_tx)],['RX airtime',show(d.rx_air_secs)+' s'],['TX airtime',show(d.tx_air_secs)+' s'],['Noise floor',show(d.noise_floor)+' dBm'],['Last RSSI',show(d.rssi)+' dBm'],['Receive errors',show(d.rx_errors)],['New RX since last sample',show(h.deltas?.rx)],['New RX errors since last sample',show(h.deltas?.rx_errors)]].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
+ $('health-tx-note').textContent='Flood TX: '+show(d.flood_tx)+' · Direct TX: '+show(d.direct_tx)+' · Counts only; other stations have not been confirmed to hear these transmissions.';
+  plot('health-rx-chart',S.history,'packets_rx','packets');plot('health-tx-chart',S.history,'packets_tx','packets');plot('health-error-chart',S.history,'rx_errors','errors');
 }
 function renderChannels(){const slots=S.channels?.slots||[];
  $('channels-table').innerHTML=slots.map(c=>`<tr><td>#${c.index}</td><td>${H(c.name||'—')}</td><td>${c.configured?'Configured':'Empty'}</td><td><button class="subtle" type="button" data-edit-channel="${c.index}">Edit</button></td></tr>`).join('');
@@ -173,3 +181,59 @@ $('channel-delete-form').addEventListener('submit',async e=>{e.preventDefault();
  try{const x=await request('/api/channels/'+idx,{method:'DELETE',body:JSON.stringify({confirm:$('channel-delete-confirm').value})});await pollCommand(x.id);$('channel-delete-confirm').value='';toast('Channel deleted');await refresh()}
  catch(err){toast(err.message,true)}finally{btn.disabled=false}});
 $('channels-refresh').addEventListener('click',async()=>{try{const x=await request('/api/channels/refresh',{method:'POST'});await pollCommand(x.id);await refresh();toast('Channel slots refreshed from T114')}catch(err){toast(err.message,true)}});
+
+// Local address book: this does not modify the radio's own contact list.
+function resetAddress(){
+ $('address-form').reset();$('address-id').value='';$('address-delete').hidden=true;
+ $('address-message').hidden=true;$('address-form-heading').textContent='Save contact';
+}
+function fillAddress(a){
+ $('address-id').value=a.id;$('address-name').value=a.nickname;
+ $('address-key').value=a.public_key||'';$('address-tags').value=a.tags||'';
+ $('address-notes').value=a.notes||'';$('address-favorite').checked=!!a.favorite;
+ $('address-delete').hidden=false;
+ $('address-message').hidden=!(a.public_key && S.contacts.some(x=>x.key===a.public_key));
+ $('address-form-heading').textContent='Edit saved contact';
+}
+function renderAddressBook(){
+ const q=($('address-search').value||'').trim().toLowerCase();
+ const filtered=(S.addressBook||[]).filter(a=>
+  [a.nickname,a.public_key,a.notes,a.tags,a.radio_name].some(x=>String(x||'').toLowerCase().includes(q)));
+ $('address-entries').innerHTML=filtered.length?filtered.map(a=>`<button class="address-entry" type="button" data-address-id="${a.id}"><span><strong>${H(a.nickname)}</strong> ${nodeTag(a.role)}<span class="secondary">${H(a.tags||'No tags')} · ${a.radio_contact?'On T114':'Saved locally'} · ${H(short(a.public_key||'No public key',23))}</span></span><span class="star" aria-label="${a.favorite?'Favorite':'Not favorite'}">${a.favorite?'★':'☆'}</span></button>`).join(''):empty(q?'No matching entries.':'No saved contacts yet. Select a discovered contact or add one manually.');
+}
+$('address-search').addEventListener('input',renderAddressBook);
+$('address-reset').addEventListener('click',resetAddress);
+$('address-entries').addEventListener('click',e=>{let b=e.target.closest('[data-address-id]');if(!b)return;let a=S.addressBook.find(x=>x.id===Number(b.dataset.addressId));if(a)fillAddress(a)});
+$('address-form').addEventListener('submit',async e=>{
+ e.preventDefault();let id=$('address-id').value;const body={nickname:$('address-name').value.trim(),public_key:$('address-key').value.trim()||null,
+ notes:$('address-notes').value,tags:$('address-tags').value,favorite:$('address-favorite').checked};
+ try{await request(id?'/api/address-book/'+id:'/api/address-book',{method:id?'PUT':'POST',body:JSON.stringify(body)});resetAddress();await refresh();toast('Address book saved')}
+ catch(err){toast(err.message,true)}
+});
+$('address-delete').addEventListener('click',async()=>{
+ const id=$('address-id').value;if(!id||!confirm('Delete this address book entry? This does not remove radio contacts.'))return;
+ try{await request('/api/address-book/'+id,{method:'DELETE'});resetAddress();await refresh();toast('Address removed')}catch(err){toast(err.message,true)}
+});
+$('address-message').addEventListener('click',()=>{
+ const key=$('address-key').value.trim().toLowerCase();
+ if(!S.contacts.some(x=>x.key===key)){toast('Sync this contact to the T114 before direct messaging',true);return}
+ navigate('messages');$('destination').value=key;$('message-text').focus();
+});
+function renderRxLog(){
+ const filter=$('rx-filter').value;
+ const rows=(S.rxLog||[]).filter(x=>!filter||x.kind===filter);
+ $('health-rx-log').innerHTML=rows.length?rows.map(r=>{
+  const signals=[Number.isFinite(r.rssi)?`${r.rssi} dBm`:'',Number.isFinite(r.snr)?`${r.snr} dB SNR`:''].filter(Boolean).join(' · ')||'—';
+  const more=r.kind==='counter_delta'?`+${r.count} received, +${r.errors} errors · aggregate only`:
+    [r.channel===null?'':`Channel ${r.channel}`,r.source?short(r.source,18):''].filter(Boolean).join(' · ');
+  return `<div class="rx-line"><time>${H(dt(r.ts))}</time><div><span class="rx-kind">${H(r.summary)}</span><span class="rx-extra">${H(more)}</span></div><span class="rx-values">${H(signals)}</span></div>`
+ }).join(''):empty('No receive events in this filter yet.');
+}
+$('rx-filter').addEventListener('change',renderRxLog);
+$('contacts-table').addEventListener('click',async e=>{
+ const button=e.target.closest('[data-save-contact]');if(!button)return;
+ const found=S.contacts.find(c=>c.key===button.dataset.saveContact);if(!found)return;
+ const existing=S.addressBook.find(x=>x.public_key===found.key);
+ if(existing){fillAddress(existing);navigate('address');return}
+ resetAddress();$('address-name').value=found.name;$('address-key').value=found.key;navigate('address');
+});

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from station.config import RADIO_DEVICE, RADIO_POWER_SOURCE
 from station.geo import contact_role
 from station.secure import unseal_key
-from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command,
+from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command, AddressEntry, RxActivity,
                         RadioEvent, StationStatus, status_set, record_event, utcnow)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -38,14 +38,47 @@ def record_contact(key, contact, observed=False):
             row.last_seen = utcnow()
         row.detail = obj
 
+def radio_rx_event(kind, data):
+    """Persist only well-defined RX metadata; never store raw payloads or private keys."""
+    info = data if isinstance(data, dict) else {}
+    def numeric(*keys):
+        for key in keys:
+            x = info.get(key)
+            if isinstance(x, (int, float)) and not isinstance(x, bool): return float(x)
+        return None
+    def channel_idx():
+        c = info.get('channel_idx', info.get('channel'))
+        try: return int(c) if c is not None and 0 <= int(c) <= 7 else None
+        except (ValueError, TypeError): return None
+    summaries = {
+        'channel':'Channel message decoded', 'direct':'Direct message decoded',
+        'advert':'Node advertisement', 'new_contact':'New contact detected',
+        'rx_log':'RF receive log event',
+    }
+    with Session.begin() as db:
+        db.add(RxActivity(kind=kind, summary=summaries.get(kind, kind),
+                          source=str(info.get('pubkey_prefix') or info.get('source') or '')[:130],
+                          channel=channel_idx(), rssi=numeric('rssi','last_rssi'),
+                          snr=numeric('snr','last_snr'),
+                          detail={key: info[key] for key in ('path_len', 'txt_type', 'direction')
+                                  if key in info and isinstance(info[key], (int, float, str, bool))}))
+
 class Collector:
     def __init__(self):
         self.mesh = None
         self.mode = 'serial'
         self.last_alert = None
+        self.local_name = 'Local node'
+        self.previous_packet_stats = None
+        self.rx_log_last_cleanup = None
 
     async def handle(self, kind, event):
         data = jsonsafe(getattr(event, 'payload', {}))
+        # Raw radio payloads are deliberately excluded from storage.
+        if kind in ('channel', 'direct', 'advert', 'new_contact', 'rx_log'):
+            radio_rx_event(kind, data)
+        if kind in ('rx_log',):
+            return
         # Intentionally do not dump private key material or device secrets into the DB.
         if kind == 'direct':
             with Session.begin() as db:
@@ -82,17 +115,31 @@ class Collector:
 
     async def connect(self):
         from meshcore import MeshCore, EventType
+        self.previous_packet_stats = None  # radio may have restarted
         self.mesh = await MeshCore.create_serial(RADIO_DEVICE, 115200)
         if self.mesh is None or not getattr(self.mesh, 'is_connected', True):
             raise RuntimeError('Serial MeshCore connection not established')
         for etype, kind in [('CONTACT_MSG_RECV', 'direct'), ('CHANNEL_MSG_RECV', 'channel'),
                             ('ACK', 'ack'), ('ADVERTISEMENT', 'advert'),
-                            ('NEW_CONTACT', 'new_contact'), ('PATH_UPDATE', 'path')]:
+                            ('NEW_CONTACT', 'new_contact'), ('PATH_UPDATE', 'path'),
+                            ('RX_LOG_DATA', 'rx_log')]:
             if hasattr(EventType, etype):
                 async def callback(event, capture=kind):
                     try: await self.handle(capture, event)
                     except Exception: log.exception('Failed processing radio event %s', capture)
                 self.mesh.subscribe(getattr(EventType, etype), callback)
+        # Cache the radio's own configured name so sent records identify the sender.
+        from meshcore import EventType
+        try:
+            self_info = await asyncio.wait_for(self.mesh.commands.send_appstart(), timeout=12)
+            if self_info.type != EventType.ERROR and isinstance(self_info.payload, dict):
+                own = jsonsafe(self_info.payload)
+                self.local_name = str(own.get('name') or own.get('adv_name') or 'Local node')[:100]
+                status_set('radio_config', {k: own[k] for k in
+                    ('name', 'radio_freq', 'radio_bw', 'radio_sf', 'radio_cr', 'tx_power')
+                    if k in own} | {'name': self.local_name})
+        except Exception as exc:
+            log.warning('Unable to read local radio name: %s', exc)
         await self.mesh.start_auto_message_fetching()
         status_set('radio', {'connected': True, 'mode': 'serial', 'device': RADIO_DEVICE})
         with Session.begin() as db:
@@ -182,6 +229,38 @@ class Collector:
                           packets_tx=number(captured.get('packets'), 'sent', 'tx', 'tx_count', 'num_sent'),
                           stats=captured))
         status_set('last_stats', captured)
+        # Counter samples are aggregate statistics, NOT identifiable packet events.
+        packet = captured.get('packets') if isinstance(captured.get('packets'), dict) else None
+        if packet is not None:
+            previous = self.previous_packet_stats
+            if previous is not None:
+                rx = packet.get('recv')
+                older = previous.get('recv')
+                errors = packet.get('recv_errors')
+                old_errors = previous.get('recv_errors')
+                if all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                       for x in (rx, older, errors, old_errors)):
+                    if rx >= older and errors >= old_errors:
+                        increment, error_increment = int(rx - older), int(errors - old_errors)
+                        if increment or error_increment:
+                            with Session.begin() as db:
+                                db.add(RxActivity(kind='counter_delta', summary='RF counter change (sample interval)',
+                                                  count=increment, errors=error_increment,
+                                                  detail={'interval': 'since preceding radio sample; not individual timestamps'}))
+                    else:
+                        with Session.begin() as db:
+                            db.add(RxActivity(kind='counter_reset', summary='Radio packet counters reset', count=0))
+            self.previous_packet_stats = packet
+        # Keep this operational log bounded; retaining 7 days limits database growth.
+        if self.rx_log_last_cleanup is None or (utcnow() - self.rx_log_last_cleanup) > timedelta(hours=1):
+            from sqlalchemy import delete
+            with Session.begin() as db:
+                db.execute(delete(RxActivity).where(RxActivity.ts < utcnow() - timedelta(days=7)))
+                # Cap at 50,000 recent entries even on a busy public mesh.
+                cutoff = db.scalar(select(RxActivity.id).order_by(RxActivity.id.desc()).offset(49999).limit(1))
+                if cutoff is not None:
+                    db.execute(delete(RxActivity).where(RxActivity.id < cutoff))
+            self.rx_log_last_cleanup = utcnow()
 
     async def execute(self, cmd):
         args = cmd.args or {}
@@ -210,8 +289,8 @@ class Collector:
             if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
             data = jsonsafe(result.payload)
             with Session.begin() as db:
-                db.add(Message(direction='out', kind=kind, target=dest, sender='local', body=body,
-                               status='sent_unconfirmed' if kind == 'direct' else 'sent',
+                db.add(Message(direction='out', kind=kind, target=dest, sender=self.local_name, body=body,
+                               status='sent_unconfirmed',
                                meta=data if isinstance(data, dict) else {'response': data}))
             record_event('outgoing_command_accepted', {'kind': kind, 'destination': dest})
             return {'accepted': True, 'radio_response': data}
@@ -232,6 +311,11 @@ class Collector:
                 response = await self.mesh.commands.set_name(updates['name'])
                 if response.type == EventType.ERROR: raise RuntimeError('Unable to set node name')
                 result_data['name'] = updates['name']
+                self.local_name = updates['name']
+                with Session() as db:
+                    current = db.get(StationStatus, 'radio_config')
+                    cached = dict(current.value or {}) if current else {}
+                status_set('radio_config', {**cached, 'name': self.local_name})
             if 'tx_power' in updates:
                 response = await self.mesh.commands.set_tx_power(updates['tx_power'])
                 if response.type == EventType.ERROR: raise RuntimeError('Unable to set TX power')

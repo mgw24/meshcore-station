@@ -23,6 +23,32 @@ class NodeLocation(Base):
     longitude = Column(Float, nullable=False)
     updated = Column(DateTime(timezone=True), default=utcnow)
 
+class AddressEntry(Base):
+    """Local address book; independent of the radio-discovered contact list."""
+    __tablename__ = 'address_book'
+    id = Column(Integer, primary_key=True)
+    public_key = Column(String(130), unique=True, nullable=True, index=True)
+    nickname = Column(String(100), nullable=False)
+    notes = Column(Text, nullable=False, default='')
+    tags = Column(String(240), nullable=False, default='')
+    favorite = Column(Boolean, nullable=False, default=False)
+    updated = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class RxActivity(Base):
+    """Decoded RX metadata or an explicitly labelled packet-counter delta."""
+    __tablename__ = 'rx_activity'
+    id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+    kind = Column(String(48), nullable=False)
+    summary = Column(String(200), nullable=False)
+    source = Column(String(130), nullable=False, default='')
+    channel = Column(Integer, nullable=True)
+    rssi = Column(Float, nullable=True)
+    snr = Column(Float, nullable=True)
+    count = Column(Integer, nullable=False, default=1)
+    errors = Column(Integer, nullable=False, default=0)
+    detail = Column(JSON, default=dict)
+
 class Message(Base):
     __tablename__ = 'messages'
     id = Column(Integer, primary_key=True)

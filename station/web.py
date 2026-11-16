@@ -24,7 +24,7 @@ from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
 from station.geo import advertised_location, contact_role
 from station.health import packet_detail, delta, seconds_old
 from station.secure import seal_key
-from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert,
+from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert, AddressEntry, RxActivity,
                         Command, RadioEvent, StationStatus, utcnow)
 
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
@@ -121,6 +121,7 @@ def status(session=Depends(user_session)):
                        'packets_rx': last.packets_rx, 'packets_tx': last.packets_tx} if last else None,
             'heartbeat_fresh': fresh, 'contact_sync': data.get('contact_sync', {}).get('value', {}),
             'channels': data.get('channels', {}).get('value', []),
+            'radio_config': data.get('radio_config', {}).get('value', {}),
             'last_stats': data.get('last_stats', {}).get('value', {})}
 
 @app.get('/api/contacts')
@@ -138,6 +139,87 @@ def messages(limit: int = 200, session=Depends(user_session)):
         return [{'id': m.id, 'ts': m.ts.isoformat(), 'direction': m.direction, 'kind': m.kind,
                  'target': m.target, 'sender': m.sender, 'text': m.body, 'status': m.status}
                 for m in rows]
+
+# Address book is distinct from the radio contact table and survives radio resets.
+PUBLIC_KEY_RE = re.compile(r'^[0-9a-fA-F]{64}$')
+
+class AddressInput(BaseModel):
+    nickname: str = Field(min_length=1, max_length=100)
+    public_key: str | None = None
+    notes: str = Field(default='', max_length=4000)
+    tags: str = Field(default='', max_length=240)
+    favorite: bool = False
+
+def normalize_address(body: AddressInput):
+    key = (body.public_key or '').strip().lower() or None
+    if key is not None and not PUBLIC_KEY_RE.fullmatch(key):
+        raise HTTPException(422, 'Public key must be a complete 64-character hexadecimal MeshCore public key')
+    name = body.nickname.strip()
+    if not name: raise HTTPException(422, 'Nickname required')
+    return dict(public_key=key, nickname=name, notes=body.notes.strip(),
+                tags=body.tags.strip(), favorite=body.favorite)
+
+def address_dict(a, contact=None):
+    return {'id': a.id, 'public_key': a.public_key, 'nickname': a.nickname,
+            'notes': a.notes, 'tags': a.tags, 'favorite': a.favorite,
+            'updated': a.updated.isoformat() if a.updated else None,
+            'radio_contact': bool(contact), 'radio_name': contact.name if contact else None,
+            'role': contact.role if contact else 'unknown'}
+
+@app.get('/api/address-book')
+def address_book(session=Depends(user_session)):
+    with Session() as db:
+        rows = db.scalars(select(AddressEntry).order_by(AddressEntry.favorite.desc(),
+                          AddressEntry.nickname.asc()).limit(2000)).all()
+        keys = [x.public_key for x in rows if x.public_key]
+        known = {c.public_key: c for c in db.scalars(select(Contact).where(Contact.public_key.in_(keys))).all()} if keys else {}
+        return [address_dict(a, known.get(a.public_key)) for a in rows]
+
+@app.post('/api/address-book', status_code=201)
+def add_address(body: AddressInput, session=Depends(require_csrf)):
+    from sqlalchemy.exc import IntegrityError
+    data = normalize_address(body)
+    try:
+        with Session.begin() as db:
+            row = AddressEntry(**data, updated=utcnow()); db.add(row); db.flush()
+            result = address_dict(row)
+    except IntegrityError:
+        raise HTTPException(409, 'That public key is already saved in the address book')
+    return result
+
+@app.put('/api/address-book/{entry_id}')
+def edit_address(entry_id: int, body: AddressInput, session=Depends(require_csrf)):
+    from sqlalchemy.exc import IntegrityError
+    data = normalize_address(body)
+    try:
+        with Session.begin() as db:
+            row = db.get(AddressEntry, entry_id)
+            if row is None: raise HTTPException(404, 'Address entry not found')
+            for key, value in data.items(): setattr(row, key, value)
+            row.updated = utcnow(); db.flush()
+            result = address_dict(row)
+    except IntegrityError:
+        raise HTTPException(409, 'That public key is already saved in another entry')
+    return result
+
+@app.delete('/api/address-book/{entry_id}')
+def delete_address(entry_id: int, session=Depends(require_csrf)):
+    with Session.begin() as db:
+        row = db.get(AddressEntry, entry_id)
+        if row is None: raise HTTPException(404, 'Address entry not found')
+        db.delete(row)
+    return {'ok': True}
+
+@app.get('/api/radio/rx-log')
+def rx_log(limit: int = 100, kind: str = '', session=Depends(user_session)):
+    with Session() as db:
+        q = select(RxActivity)
+        if kind: q = q.where(RxActivity.kind == kind[:48])
+        records = db.scalars(q.order_by(RxActivity.ts.desc()).limit(min(max(limit, 1), 500))).all()
+        return [{'id': r.id, 'ts': r.ts.isoformat(), 'kind': r.kind,
+                 'summary': r.summary, 'source': r.source,
+                 'channel': r.channel, 'rssi': r.rssi, 'snr': r.snr,
+                 'count': r.count, 'errors': r.errors, 'detail': r.detail} for r in records]
 
 @app.get('/api/events')
 def events(limit: int = 100, session=Depends(user_session)):
