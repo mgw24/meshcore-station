@@ -1,0 +1,21 @@
+apiVersion: 1
+datasources:
+  - name: MeshCore PostgreSQL
+    uid: meshcore-postgres
+    type: postgres
+    access: proxy
+    url: db:5432
+    user: grafana_reader
+    jsonData:
+      database: meshcore
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: $PGPASSWORD
+    isDefault: true
+  - name: Prometheus
+    uid: meshcore-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090

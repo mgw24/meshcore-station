@@ -1,0 +1,20 @@
+[Unit]
+Description=MeshCore T114 host-side USB firmware flashing agent
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/meshcore-station
+ExecStart=/usr/bin/python3 /opt/meshcore-station/firmware-agent/agent.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

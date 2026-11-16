@@ -1,0 +1,17 @@
+groups:
+  - name: meshcore-station
+    rules:
+      - alert: MeshCoreCollectorOffline
+        expr: meshcore_collector_connected == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: MeshCore radio collector is offline
+      - alert: MeshCoreStationAPIUnavailable
+        expr: up{job="meshcore-station"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: MeshCore station web API is unreachable

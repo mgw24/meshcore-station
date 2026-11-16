@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css"></head>
+<body>
+<div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
+  <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
+  <label>Username<input name="username" autocomplete="username" value="admin" required></label>
+  <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+  <div id="login-error" class="error"></div><button type="submit" class="button primary">Sign in</button>
+</form></div>
+<div id="shell" class="shell" hidden>
+<aside class="sidebar"><div class="logo"><span class="brand-orb">◉</span><span><strong>MeshCore</strong><small>STATION CONSOLE</small></span></div>
+  <div class="nav-label">OPERATIONS</div>
+  <nav id="navigation">
+    <button class="nav active" data-view="overview">▣ <span>Overview</span></button>
+    <button class="nav" data-view="messages">◫ <span>Messages</span></button>
+    <button class="nav" data-view="nodes">⟠ <span>Nodes & Contacts</span></button>
+    <button class="nav" data-view="telemetry">⌁ <span>Telemetry</span></button>
+    <button class="nav" data-view="alerts">◈ <span>Alerts</span></button>
+    <button class="nav" data-view="events">☷ <span>Event Log</span></button>
+  </nav><div class="nav-label">MAINTENANCE</div>
+  <nav><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button>
+    <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
+  </nav><div class="side-footer"><div>MeshCore USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+</aside>
+<main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
+  <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
+</header>
+<div class="content">
+<section id="view-overview" class="view"><div class="kpis">
+  <article class="kpi"><span class="eyebrow">RADIO STATUS</span><b id="kpi-radio">—</b><small id="kpi-device">Waiting for collector</small></article>
+  <article class="kpi"><span class="eyebrow">KNOWN NODES</span><b id="kpi-nodes">—</b><small>Contacts discovered</small></article>
+  <article class="kpi"><span class="eyebrow">LOGGED MESSAGES</span><b id="kpi-messages">—</b><small>Received + transmitted</small></article>
+  <article class="kpi"><span class="eyebrow">BATTERY</span><b id="kpi-battery">—</b><small>Most recent telemetry</small></article>
+</div>
+<div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">LAST 24 HOURS</span><h2>Radio signal environment</h2></div><span class="legend">● Noise floor (dBm)</span></div><div id="overview-chart" class="chart"></div></article>
+<article class="panel"><div class="panel-head"><div><span class="eyebrow">LIVE ACTIVITY</span><h2>Recent messages</h2></div><button class="subtle go-messages">View all ↗</button></div><div id="recent-messages" class="stream"></div></article></div>
+<div class="two-col"><article class="panel"><div class="panel-head"><h2>Recently discovered nodes</h2><button id="overview-discover" class="subtle">Sync contacts ↻</button></div><div id="recent-nodes" class="stream"></div></article>
+<article class="panel"><div class="panel-head"><h2>Active alerts</h2></div><div id="recent-alerts" class="stream"></div></article></div>
+</section>
+<section id="view-messages" class="view" hidden><div class="two-col messaging-grid"><article class="panel">
+  <div class="panel-head"><div><span class="eyebrow">RF MESSAGING</span><h2>Send message</h2></div></div>
+  <form id="send-form"><label>Recipient or channel<select id="destination" required><option value="channel:0">Channel 0</option></select></label>
+  <label>Message<textarea id="message-text" rows="5" maxlength="180" placeholder="Type a short radio message…" required></textarea></label>
+  <div class="form-row"><span id="char-count" class="muted">0 / 180</span><button class="button primary" type="submit">Transmit ↗</button></div><p class="hint">Direct sends are initially marked “sent/unconfirmed” until acknowledged. Channel messages do not have a direct-message ACK.</p>
+  </form></article><article class="panel"><div class="panel-head"><h2>Message history</h2><a href="/api/export/messages.csv" id="export-messages" class="subtle">Export CSV ↓</a></div><div id="all-messages" class="stream tall"></div></article></div></section>
+<section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
+<section id="view-telemetry" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><h2>Battery history</h2></div><div id="battery-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Noise floor history</h2></div><div id="noise-chart" class="chart"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Packet counters (RX)</h2></div><div id="rx-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Last packet RSSI (dBm)</h2></div><div id="rssi-chart" class="chart"></div></article></div><article class="panel"><div class="panel-head"><h2>Detailed statistics</h2></div><div id="telemetry-info" class="text-block"></div></article></section>
+<section id="view-alerts" class="view" hidden><article class="panel"><div class="panel-head"><h2>Collector and station alerts</h2></div><div id="all-alerts" class="stream"></div></article></section>
+<section id="view-events" class="view" hidden><article class="panel"><div class="panel-head"><h2>Radio event log</h2></div><div id="event-list" class="stream tall"></div></article></section>
+<section id="view-firmware" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">HOST-ASSISTED SERIAL DFU</span><h2>Flash Heltec T114</h2></div></div>
+  <p class="bodycopy">Upload an official <b>Heltec_t114…companion_radio_usb…zip</b> package from the <a target="_blank" rel="noopener" href="https://flasher.meshcore.io/">MeshCore flasher</a>. The Ubuntu host agent pauses only the collector, flashes over USB, then restarts it.</p>
+  <div class="warning"><b>Firmware update caution</b><p>Make a configuration backup first. Confirm the exact board variant and firmware role. The ESXi USB device may detach when the radio enters its bootloader; manual recovery may be required.</p></div>
+  <form id="firmware-form"><label>Official Nordic DFU ZIP<input id="firmware-file" type="file" accept=".zip" required></label><label>Type <b>FLASH T114</b> to confirm<input id="flash-confirm" autocomplete="off" placeholder="FLASH T114" required></label>
+  <button class="button danger" type="submit">Start firmware update</button></form></article>
+  <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
+</div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js"></script></body></html>

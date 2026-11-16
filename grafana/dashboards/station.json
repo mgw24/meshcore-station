@@ -1,0 +1,12 @@
+{
+  "uid":"meshcore-station","title":"MeshCore Station Overview","tags":["meshcore","radio"],
+  "timezone":"browser","schemaVersion":39,"version":1,"refresh":"30s",
+  "time":{"from":"now-24h","to":"now"},
+  "panels":[
+    {"id":1,"type":"timeseries","title":"Messages by minute","gridPos":{"x":0,"y":0,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT $__timeGroupAlias(ts, '1m'), count(*)::double precision AS value FROM messages WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1"}]},
+    {"id":2,"type":"timeseries","title":"Battery percentage","gridPos":{"x":12,"y":0,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT ts AS time, battery_pct AS value FROM samples WHERE $__timeFilter(ts) AND battery_pct IS NOT NULL ORDER BY ts"}]},
+    {"id":3,"type":"timeseries","title":"Radio noise floor (dBm)","gridPos":{"x":0,"y":8,"w":12,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT ts AS time, noise_floor AS value FROM samples WHERE $__timeFilter(ts) AND noise_floor IS NOT NULL ORDER BY ts"}]},
+    {"id":4,"type":"timeseries","title":"Collector connected","gridPos":{"x":12,"y":8,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"meshcore-prometheus"},"targets":[{"refId":"A","expr":"meshcore_collector_connected","legendFormat":"connected"}]},
+    {"id":5,"type":"timeseries","title":"Incoming vs outgoing messages","gridPos":{"x":0,"y":16,"w":24,"h":8},"datasource":{"type":"postgres","uid":"meshcore-postgres"},"targets":[{"refId":"A","format":"time_series","rawSql":"SELECT $__timeGroupAlias(ts, '5m'), count(*)::double precision AS value, direction AS metric FROM messages WHERE $__timeFilter(ts) GROUP BY 1, direction ORDER BY 1"}]}
+  ]
+}
