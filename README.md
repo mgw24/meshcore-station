@@ -2,7 +2,7 @@
 
 GitHub source: **https://github.com/mgw24/meshcore-station**
 
-Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 LTS Minimal on VMware vSphere / ESXi**. The T114 is permanently attached to the ESXi host with USB passthrough. Access is provided over the existing VPN; no Tailscale component is included.
+Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 LTS Minimal on VMware vSphere / ESXi**. The T114 is permanently attached to the ESXi host with USB passthrough. 
 
 ## v5: Scheduled email digests + Grafana operations refresh
 
