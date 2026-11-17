@@ -23,8 +23,9 @@ from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
                             COOKIE_SECURE, SPOOL_DIR, RADIO_POWER_SOURCE)
 from station.geo import advertised_location, contact_role
 from station.health import packet_detail, delta, seconds_old
+from station.radio_diagnostics import sample_window, evidence_label
 from station.secure import seal_key
-from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert, AddressEntry, RxActivity,
+from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert, AddressEntry, RxActivity, TxEvidence,
                         Command, RadioEvent, StationStatus, utcnow)
 from station.db import DigestSettings, DigestDelivery
 from station.digest import (settings as get_digest_settings, public_settings, public_run,
@@ -36,7 +37,7 @@ from typing import Literal
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
 
-app = FastAPI(title='MeshCore Station', docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title='MeshCore Station 0.8.0', docs_url=None, redoc_url=None, openapi_url=None)
 BASE = Path(__file__).resolve().parent.parent
 app.mount('/assets', StaticFiles(directory=BASE / 'static'), name='assets')
 signer = URLSafeTimedSerializer(SESSION_SECRET, salt='meshcore-station-auth')
@@ -130,6 +131,56 @@ def status(session=Depends(user_session)):
             'radio_config': data.get('radio_config', {}).get('value', {}),
             'last_stats': data.get('last_stats', {}).get('value', {})}
 
+@app.get('/api/version')
+def version(session=Depends(user_session)):
+    return {'version': '0.8.0', 'release': 'Radio Diagnostics'}
+
+@app.get('/api/radio/diagnostics')
+def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
+    """Historical counter changes plus evidence; never claim RF delivery from counters."""
+    hours = min(max(hours, 1), 168)
+    now = utcnow()
+    cutoff = now - timedelta(hours=hours)
+    with Session() as db:
+        samples = list(db.scalars(select(Sample).where(Sample.ts >= cutoff)
+                      .order_by(Sample.ts.desc()).limit(3000)).all())
+        messages = list(db.scalars(select(Message).where(Message.direction == 'out')
+                       .order_by(Message.ts.desc()).limit(30)).all())
+        ids = [m.id for m in messages]
+        evidence = list(db.scalars(select(TxEvidence).where(TxEvidence.message_id.in_(ids))
+                       .order_by(TxEvidence.ts)).all()) if ids else []
+        status_rows = {r.key:r for r in db.scalars(select(StationStatus).where(
+            StationStatus.key.in_(['radio','worker_heartbeat','routing_policy','routing_observed','contact_sync','radio_config']))).all()}
+    related = {}
+    for row in evidence:
+        related.setdefault(row.message_id, []).append(row)
+    timeline = []
+    for msg in messages:
+        proof = related.get(msg.id, [])
+        timeline.append({'id': msg.id, 'ts': msg.ts.isoformat(), 'kind': msg.kind,
+                         'destination': msg.target, 'sender': msg.sender,
+                         'status': msg.status, 'text_preview': msg.body[:120],
+                         'evidence': [{'ts':p.ts.isoformat(), 'kind':p.kind,
+                                       'label':evidence_label(p.kind, msg.kind)} for p in proof]})
+    heartbeat = status_rows.get('worker_heartbeat')
+    age = seconds_old(heartbeat.updated, now) if heartbeat else None
+    reported = (status_rows.get('radio').value or {}) if status_rows.get('radio') else {}
+    def val(key):
+        row = status_rows.get(key)
+        return (row.value or {}) if row else {}
+    return {'version': '0.8.0', 'window_hours': hours,
+            'collector_online': bool(age is not None and age < 35 and reported.get('connected')),
+            'heartbeat_age_secs': age, 'traffic': sample_window(samples, now),
+            'routing': {'observed': val('routing_observed'),
+                        'managed_policy': {k:val('routing_policy').get(k) for k in ('default_scope','scope_configured','channel_scopes')}},
+            'contact_sync': val('contact_sync'), 'radio_config': val('radio_config'),
+            'transmissions': timeline,
+            'limitations': ['Packet counters include non-chat traffic.',
+                'Counter reset intervals are not added to packet totals.',
+                'Radio acceptance is not proof of reception.',
+                'A matching channel copy is not an acknowledgment from a recipient.',
+                'Missing evidence may reflect firmware visibility limits.']}
+
 @app.get('/api/contacts')
 def contacts(session=Depends(user_session)):
     with Session() as db:
@@ -142,9 +193,36 @@ def contacts(session=Depends(user_session)):
 def messages(limit: int = 200, session=Depends(user_session)):
     with Session() as db:
         rows = db.scalars(select(Message).order_by(Message.ts.desc()).limit(min(max(limit, 1), 2000))).all()
+        ids = [m.id for m in rows if m.direction == 'out']
+        evidence = {}
+        if ids:
+            for e in db.scalars(select(TxEvidence).where(TxEvidence.message_id.in_(ids)).order_by(TxEvidence.id)).all():
+                evidence.setdefault(e.message_id, []).append({
+                    'kind': e.kind, 'ts': e.ts.isoformat(),
+                    'detail': e.detail if e.kind == 'channel_echo' else {}})
         return [{'id': m.id, 'ts': m.ts.isoformat(), 'direction': m.direction, 'kind': m.kind,
-                 'target': m.target, 'sender': m.sender, 'text': m.body, 'status': m.status}
+                 'target': m.target, 'sender': m.sender, 'text': m.body, 'status': m.status,
+                 'tx_evidence': evidence.get(m.id, [])}
                 for m in rows]
+
+@app.get('/api/tx/diagnostics')
+def tx_diagnostics(session=Depends(user_session)):
+    # Authentication required; information limited to saved TX evidence and safe aggregate stats.
+    with Session() as db:
+        rows = db.scalars(select(Message).where(Message.direction == 'out')
+                          .order_by(Message.ts.desc()).limit(100)).all()
+        ids = [m.id for m in rows]
+        events = db.scalars(select(TxEvidence).where(TxEvidence.message_id.in_(ids))
+                            .order_by(TxEvidence.id.desc())).all() if ids else []
+        linked = {}
+        for e in events:
+            linked.setdefault(e.message_id, []).append(e.kind)
+        return {'recent_messages': len(rows),
+                'accepted': sum('radio_accepted' in linked.get(m.id, []) for m in rows),
+                'direct_acknowledged': sum(m.kind == 'direct' and 'direct_ack' in linked.get(m.id, []) for m in rows),
+                'channel_echo_observed': sum(m.kind == 'channel' and 'channel_echo' in linked.get(m.id, []) for m in rows),
+                'unconfirmed': sum(m.status == 'sent_unconfirmed' and 'channel_echo' not in linked.get(m.id, []) for m in rows),
+                'note': 'A radio send response is not delivery. A matching channel echo is forwarding evidence, not recipient acknowledgment.'}
 
 # Address book is distinct from the radio contact table and survives radio resets.
 PUBLIC_KEY_RE = re.compile(r'^[0-9a-fA-F]{64}$')
@@ -709,6 +787,13 @@ def enqueue_digest(kind):
         db.add(run)
         db.flush()
         return {'id': run.id, 'status': run.status}
+
+
+@app.post('/api/digest/probe-smtp')
+def digest_probe_smtp(session=Depends(require_csrf)):
+    # The digest worker owns the network connection, not the API container.
+    # The probe uses saved settings and sends no email.
+    return enqueue_digest('probe')
 
 
 @app.post('/api/digest/send-test')

@@ -63,3 +63,25 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 .routing-channel{display:flex;gap:.7rem;justify-content:space-between;align-items:center}
 .routing-channel select{max-width:230px}
 @media(max-width:640px){.routing-channel{flex-direction:column;align-items:stretch}.routing-channel select{max-width:none}}
+
+/* TX confirmation metrics: compact on mobile, no falsely green delivery badges. */
+.tx-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}
+.tx-stat{border-radius:12px;background:var(--panel,#132b34);border:1px solid rgba(120,169,179,.22);padding:12px;display:flex;flex-direction:column;gap:8px}
+.tx-stat span{color:var(--muted,#93afb7);font-size:.78rem}
+.tx-stat b{font-size:1.5rem;font-variant-numeric:tabular-nums}
+@media(max-width:760px){.tx-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 0.8.0 radio diagnostics — accessible at desktop and mobile sizes */
+.diag-bars{height:210px;display:flex;gap:3px;align-items:end;padding:14px 8px 8px;border-bottom:1px solid var(--border);overflow-x:auto}
+.diag-column{min-width:8px;flex:1;max-width:32px;height:100%;display:flex;align-items:end;justify-content:center;gap:2px}
+.diag-bar{min-width:3px;width:45%;border-radius:3px 3px 0 0;min-height:2px}
+.diag-bar.rx{background:#42d7bf}.diag-bar.tx{background:#efb766}
+.diag-column.reset{color:var(--red);font-size:1.2rem;align-items:center;border-left:1px dashed var(--red)}
+.diag-transmissions{display:grid;gap:10px;margin-top:12px}
+.diag-message{border:1px solid var(--border);background:#0d1822;border-radius:10px;padding:14px}
+.diag-message summary{display:flex;align-items:start;justify-content:space-between;gap:12px;cursor:pointer}
+.diag-message summary span{display:grid;gap:5px;min-width:0}.diag-message small{color:var(--muted);overflow-wrap:anywhere}
+.diag-message time{font-size:.75rem;color:var(--muted);white-space:nowrap}
+.diag-message ol{margin:12px 0 0;padding-left:24px;font-size:.83rem;line-height:1.8;color:var(--muted)}
+.diag-message li{padding:5px 0}.diag-message li time{margin-right:12px}
+@media(max-width:720px){.diag-message summary{flex-wrap:wrap}.diag-bars{height:155px}.diag-message li time{display:block}}

@@ -1,6 +1,6 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
-const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], routing:null, routingCatalog:null, status:null};
+const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], routing:null, routingCatalog:null, txDiag:null, radioDiag:null, status:null};
 const H = (v) => String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dt = (v) => v ? new Date(v).toLocaleString() : '—';
 const short = (v,n=18) => String(v||'').length>n ? String(v).slice(0,n)+'…' : String(v||'');
@@ -17,14 +17,30 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
   return ({repeater:['repeater','↗','Repeater'],client:['client','●','Companion'],room_server:['room_server','▣','Room server'],sensor:['sensor','◆','Sensor']})[roleKey]||['unknown','?','Unknown'];
 }
 function nodeTag(role){const [css,icon,label]=nodeStyle(role);return `<span class="node-tag ${css}"><span aria-hidden="true">${icon}</span> ${H(label)}</span>`}
-function messageStatus(v){return ({sent:'Radio accepted · delivery unconfirmed',sent_unconfirmed:'Radio accepted · delivery unconfirmed',acknowledged:'Acknowledged',simulated:'Simulated'})[v]||String(v||'')}
+function messageStatus(v){return ({sent:'Radio accepted · delivery unconfirmed',sent_unconfirmed:'Radio accepted · delivery unconfirmed',acknowledged:'Direct ACK received',simulated:'Simulated'})[v]||String(v||'')}
+function txLabel(m){
+ if(m.direction!=='out')return messageStatus(m.status);
+ const evidence=m.tx_evidence||[];
+ if(m.kind==='direct' && (m.status==='acknowledged'||evidence.some(x=>x.kind==='direct_ack')))return 'Direct ACK received';
+ if(m.kind==='channel' && evidence.some(x=>x.kind==='channel_echo'))return 'Matching channel repeat heard · recipient unconfirmed';
+ if(evidence.some(x=>x.kind==='radio_accepted') || m.status==='sent_unconfirmed')return 'Radio accepted · delivery unconfirmed';
+ return messageStatus(m.status);
+}
+function renderTxDiagnostics(){
+ const t=S.txDiag;if(!t)return;
+ const x=$('tx-confirmation-stats');if(!x)return;
+ x.innerHTML=[['Radio accepted',t.accepted],['Direct ACKs',t.direct_acknowledged],['Channel echoes',t.channel_echo_observed],['Unconfirmed',t.unconfirmed]].map(([a,b])=>`<div class="tx-stat"><span>${H(a)}</span><b>${Number(b)||0}</b></div>`).join('');
+ const list=S.messages.filter(m=>m.direction==='out').slice(0,12);
+ $('tx-confirmation-list').innerHTML=list.length?list.map(m=>item(messageHeading(m),`${short(m.text,75)} · ${txLabel(m)}`,m.ts,'out')).join(''):empty('No outbound messages yet');
+}
+
 function messageHeading(m){const node=(m.direction==='out')?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'Local node'):(m.sender||'Unknown');return `${m.kind==='channel'?'#'+m.target:'Direct'} · ${m.direction==='in'?'Received':'Sent'} · ${node}`}
 function item(title,body,time,dot=''){return `<div class="stream-item"><span class="dot ${H(dot)}"></span><div class="stream-main"><div class="stream-head"><div class="stream-title">${H(title)}</div><time class="stream-time">${H(dt(time))}</time></div><div class="stream-body">${H(body)}</div></div></div>`}
 function plot(element, values, key, unit){
@@ -41,7 +57,7 @@ function fillDestinations(){let old=$('destination').value;const channels=(S.sta
 function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  const st=S.status, radio=st.radio||{};$('mode-badge').textContent='USB SERIAL';$('mode-badge').className='pill';$('connection-badge').textContent=radio.connected?'● Connected':'● Offline';$('connection-badge').className='pill '+(radio.connected?'':'red');$('kpi-radio').textContent=radio.connected?'Online':'Offline';$('kpi-device').textContent=radio.error||radio.device||'Awaiting device';$('kpi-nodes').textContent=st.counts.contacts;const sync=st.contact_sync||{};const syncText=typeof sync.radio_contacts==='number'?`${sync.radio_contacts} on radio · +${sync.new_in_sync||0} new at last sync`:'Awaiting radio contact sync';$('nodes-kpi-detail').textContent=syncText;$('contact-sync-summary').textContent=`${syncText}${sync.sync_at?' · '+dt(sync.sync_at):''}. RX packets do not increase this count automatically.`;$('kpi-messages').textContent=st.counts.messages;$('power-title').textContent=st.power_source==='usb'?'POWER SOURCE':'BATTERY';$('kpi-battery').textContent=st.power_source==='usb'?'USB Powered':(st.sample?.battery_pct!=null ? st.sample.battery_pct.toFixed(0)+'%' : '—');$('kpi-battery').style.fontSize=st.power_source==='usb'?'1.35rem':'';$('power-caption').textContent=st.power_source==='usb'?'No battery installed':'Most recent telemetry';$('battery-panel').hidden=st.power_source==='usb';
  const rec=S.messages.slice(0,7);$('recent-messages').innerHTML=rec.length?rec.map(m=>item(messageHeading(m),m.text,m.ts,m.direction)).join(''):empty('No messages yet');
- $('all-messages').innerHTML=S.messages.length?S.messages.map(m=>item(messageHeading(m),`${m.text} · ${messageStatus(m.status)}`,m.ts,m.direction)).join(''):empty('No messages yet');
+ $('all-messages').innerHTML=S.messages.length?S.messages.map(m=>item(messageHeading(m),`${m.text} · ${txLabel(m)}`,m.ts,m.direction)).join(''):empty('No messages yet');
  $('recent-nodes').innerHTML=S.contacts.length?S.contacts.slice(0,6).map(n=>`<div class="node-row">${nodeTag(n.role)}${item(n.name,short(n.key,36),n.last_seen)}</div>`).join(''):empty('No contacts discovered');
  $('contacts-table').innerHTML=S.contacts.length?S.contacts.map(n=>`<tr><td>${H(n.name)}</td><td>${nodeTag(n.role)}</td><td><code title="${H(n.key)}">${H(short(n.key,40))}</code></td><td>${H(dt(n.last_seen))}</td><td><button class="subtle" type="button" data-save-contact="${H(n.key)}">Save ↗</button></td></tr>`).join(''):`<tr><td colspan="5">No contacts discovered yet</td></tr>`;
  $('recent-alerts').innerHTML=S.alerts.filter(a=>!a.resolved).length?S.alerts.filter(a=>!a.resolved).slice(0,5).map(a=>item(a.severity.toUpperCase(),a.message,a.ts,'danger')).join(''):empty('No active alerts');
@@ -54,8 +70,8 @@ function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
 }
 let loading=false;
 async function refresh(){if(!S.csrf || loading)return;loading=true;try{
-  const [st,contacts,msg,events,alerts,hist,jobs,mapNodes,health,channels,addressBook,rxLog]=await Promise.all([request('/api/status'),request('/api/contacts'),request('/api/messages?limit=300'),request('/api/events?limit=100'),request('/api/alerts'),request('/api/history?hours=24'),request('/api/firmware/jobs'),request('/api/map/nodes'),request('/api/radio/health'),request('/api/channels'),request('/api/address-book'),request('/api/radio/rx-log?limit=150')]);
-  Object.assign(S,{status:st,contacts,messages:msg,events,alerts,history:hist,jobs,mapNodes,health,channels,addressBook,rxLog});render();renderHealth();renderChannels();renderAddressBook();renderRxLog();if(S.page==='map')updateMap();
+  const [st,contacts,msg,events,alerts,hist,jobs,mapNodes,health,channels,addressBook,rxLog,txDiag]=await Promise.all([request('/api/status'),request('/api/contacts'),request('/api/messages?limit=300'),request('/api/events?limit=100'),request('/api/alerts'),request('/api/history?hours=24'),request('/api/firmware/jobs'),request('/api/map/nodes'),request('/api/radio/health'),request('/api/channels'),request('/api/address-book'),request('/api/radio/rx-log?limit=150'),request('/api/tx/diagnostics')]);
+  Object.assign(S,{status:st,contacts,messages:msg,events,alerts,history:hist,jobs,mapNodes,health,channels,addressBook,rxLog,txDiag});render();renderTxDiagnostics();renderHealth();renderChannels();renderAddressBook();renderRxLog();if(S.page==='map')updateMap();
 }catch(e){toast(e.message,true)}finally{loading=false}}
 async function enqueue(payload){const x=await request('/api/commands',{method:'POST',body:JSON.stringify(payload)});toast('Command queued #'+x.id);const deadline=Date.now()+20000;while(Date.now()<deadline){await new Promise(r=>setTimeout(r,1200));let y=await request('/api/commands/'+x.id);if(y.state==='failed')throw Error(y.error);if(y.state==='complete'){toast('Radio command accepted');await refresh();return y}}
  toast('Command queued. Check activity for results.')}
@@ -265,7 +281,7 @@ async function loadDigest(){
     for(const sec of ['received','sent','radio','alerts','nodes','rx'])$('digest-section-'+sec).checked=!!x['include_'+sec];
     $('digest-password').value='';$('digest-clear-password').checked=false;
     $('digest-password-state').textContent=x.password_configured?'An SMTP password is saved (encrypted). Leave blank to retain it.':'No SMTP password saved.';
-    $('digest-worker-status').textContent=x.worker_online?'● Scheduler online':'● Scheduler offline';
+    $('digest-worker-status').textContent=x.worker_online?'● Scheduler online':'● Scheduler offline — queued email cannot send';
     $('digest-worker-status').className='pill '+(x.worker_online?'':'red');
     $('digest-next').textContent=x.enabled?(x.next_due?'Next scheduled delivery: '+dt(x.next_due):'Next delivery not yet calculated'):'Scheduled digests disabled';
     await refreshDigestHistory();
@@ -290,6 +306,12 @@ $('digest-preview-btn').addEventListener('click',async()=>{
   catch(e){toast(e.message,true)}
 });
 $('digest-refresh-btn').addEventListener('click',refreshDigestHistory);
+$('digest-probe-btn').addEventListener('click',async()=>{
+  try{const res=await request('/api/digest/probe-smtp',{method:'POST'});
+    toast('SMTP diagnostic queued (#'+res.id+'). Check delivery history for the result.');
+    await refreshDigestHistory();
+  }catch(e){toast(e.message,true)}
+});
 $('digest-test-btn').addEventListener('click',async()=>{
   if(!confirm('Send an SMTP connectivity test to your saved recipients?'))return;
   try{const res=await request('/api/digest/send-test',{method:'POST'});toast('Test email queued (#'+res.id+'). Check delivery history.');await refreshDigestHistory()}
@@ -361,3 +383,49 @@ $('routing-save').addEventListener('click',async()=>{
 // Render after sign-in and on Routing navigation; do not touch the serial interface.
 const oldNavigate=navigate;
 navigate=function(view){oldNavigate(view);if(view==='routing')refreshRouting().catch(e=>toast(e.message,true))};
+
+// 0.8.0 — read-only radio diagnostic timeline. Never turn an RF counter into a delivery claim.
+const D08={data:null};
+function diagNumber(x){return x==null?'—':Number(x).toLocaleString()}
+function diagKpi(title,value,subtitle){return `<article class="kpi"><span class="eyebrow">${H(title)}</span><b>${H(value)}</b><small>${H(subtitle)}</small></article>`}
+function diagDetail(name,value){return `<div class="health-detail"><span>${H(name)}</span><b>${H(value)}</b></div>`}
+function renderRadioDiagnostics(){
+ const d=D08.data;if(!d)return;
+ const t=d.traffic||{},total=t.totals||{},latest=t.latest||{},route=d.routing||{};
+ $('diag-kpis').innerHTML=[
+   diagKpi('COLLECTOR',d.collector_online?'Online':'Offline / stale',d.heartbeat_age_secs==null?'No heartbeat':`${d.heartbeat_age_secs}s heartbeat age`),
+   diagKpi('RECEIVED',diagNumber(total.rx),`Observed changes / ${d.window_hours}h`),
+   diagKpi('TRANSMITTED',diagNumber(total.tx),`Observed changes / ${d.window_hours}h`),
+   diagKpi('RX ERRORS',diagNumber(total.rx_errors),`${t.resets||0} reset intervals excluded`)
+ ].join('');
+ const policy=route.managed_policy||{};
+ $('diag-settings').innerHTML=[
+  ['Current noise',latest.noise_floor==null?'Unavailable':`${latest.noise_floor} dBm`],
+  ['Last RSSI',latest.rssi==null?'Unavailable':`${latest.rssi} dBm`],
+  ['TX power',d.radio_config?.tx_power==null?'Unknown':`${d.radio_config.tx_power} dBm`],
+  ['Path hash',route.observed?.path_hash_bytes==null?'Not read':`${route.observed.path_hash_bytes} bytes`],
+  ['Default region',!policy.scope_configured?'Not Station-managed':(policy.default_scope||'Unscoped')],
+  ['Contact sync',d.contact_sync?.sync_at||'No recent sync'],
+  ['Telemetry age',t.latest_age_secs==null?'Unavailable':`${t.latest_age_secs}s`],
+  ['Packets RX (since reboot)',diagNumber(latest.rx)],
+  ['Packets TX (since reboot)',diagNumber(latest.tx)]
+ ].map(([a,b])=>diagDetail(a,b)).join('');
+ const intervals=(t.intervals||[]).slice(-40);
+ const max=Math.max(1,...intervals.filter(x=>!x.reset).flatMap(x=>[x.counts.rx||0,x.counts.tx||0]));
+ $('diag-traffic').innerHTML=intervals.length?intervals.map(x=>x.reset?'<div class="diag-column reset" title="Radio counter reset" aria-label="Reset interval">↻</div>':
+  `<div class="diag-column" title="${H(x.ts)} · RX ${diagNumber(x.counts.rx)} · TX ${diagNumber(x.counts.tx)}"><div class="diag-bar rx" style="height:${Math.round(100*(x.counts.rx||0)/max)}%"></div><div class="diag-bar tx" style="height:${Math.round(100*(x.counts.tx||0)/max)}%"></div></div>`).join(''):empty('Not enough telemetry samples yet');
+ $('diag-transmissions').innerHTML=(d.transmissions||[]).length?d.transmissions.map(m=>{
+ const proof=(m.evidence||[]).map(p=>`<li><time>${H(dt(p.ts))}</time><span>${H(p.label)}</span></li>`).join('');
+ return `<details class="diag-message"><summary><span><b>${H(m.sender||'Local node')}</b> · ${H(m.kind==='channel'?'Channel '+m.destination:'Direct message')}<small>${H(m.text_preview)}</small></span><time>${H(dt(m.ts))}</time></summary><ol>${proof||'<li>No matching radio evidence recorded</li>'}</ol></details>`;
+ }).join(''):empty('No outbound messages logged');
+}
+async function refreshDiagnostics(){
+ if(!S.csrf)return;
+ D08.data=await request(`/api/radio/diagnostics?hours=${Number($('diag-window').value)||24}`);
+ renderRadioDiagnostics();
+}
+$('diag-window').addEventListener('change',()=>refreshDiagnostics().catch(e=>toast(e.message,true)));
+$('diag-refresh').addEventListener('click',()=>refreshDiagnostics().catch(e=>toast(e.message,true)));
+// Refresh the diagnostics only when its page is visible; no extra USB polling.
+const oldRefresh08=refresh;
+refresh=async function(){await oldRefresh08();if(S.page==='diagnostics')await refreshDiagnostics().catch(e=>toast(e.message,true));};
