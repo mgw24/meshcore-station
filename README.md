@@ -1,14 +1,14 @@
-# MeshCore Station 0.8.1
+# MeshCore Station 0.8.2
 
 **Self-hosted MeshCore Companion console** for the Heltec T114 V2, Ubuntu Server 24.04 LTS Minimal, Docker Compose and VMware ESXi USB passthrough.
 
-**Current version: `0.8.1`** · [Release notes](RELEASE-0.8.1.md) · [GitHub source](https://github.com/mgw24/meshcore-station)
+**Current version: `0.8.2`** · [Release notes](RELEASE-0.8.2.md) · [GitHub source](https://github.com/mgw24/meshcore-station)
 
 This is a community-built project, **not an official MeshCore release**. It is intended for a privately reachable web interface (for example, your existing VPN). There is no Tailscale dependency.
 
 ## Features
 
-- **Messaging:** compact send form above a full-width message history, searchable by sender/text/destination, filterable by direction/channel, with timestamp-based pagination, expandable transmission evidence and CSV export.
+- **Messaging:** compact composer above a full-width, dense single-line message history. Click or tap a row to view the full message, metadata and TX evidence. Contextual `@ Reply` drafts channel messages and uniquely identified direct replies; search, filters, pagination and CSV export are retained.
 - **Radio diagnostics:** serial connection state, traffic deltas, receiver errors, RSSI, noise floor, uptime, and conservative TX confirmation tracking (radio accepted, channel echo, direct ACK where available).
 - **Routing and regions:** 1-, 2-, or 3-byte path-hash controls and Companion outgoing flood scopes, with warnings and verification. Region scope is distinct from radio frequency and repeater-side permissions.
 - **Contacts:** discovered nodes, repeater/client/room-server/sensor icons, address book with notes and favorites, contact synchronization status, and a map with manually assigned or advertised coordinates.
@@ -23,27 +23,29 @@ One Docker collector owns the T114 serial device (`/dev/meshcore` inside the con
 
 The T114 runs MeshCore **USB Companion**, not Repeater firmware. A separate repeater is required to forward other mesh users' packets.
 
-## Updating an existing 0.8.0 station to 0.8.1
+## Updating an existing 0.8.1 station to 0.8.2
 
-1. From the Ubuntu VM, back up the database: `cd /opt/meshcore-station && sudo ./scripts/backup.sh`.
-2. Transfer the release ZIP from a **computer** to `/tmp/meshcore-station-0.8.1-upgrade.zip` on the VM.
-3. Extract and run the installer:
+1. From the Ubuntu VM, back up PostgreSQL: `cd /opt/meshcore-station && sudo ./scripts/backup.sh`.
+2. Transfer `meshcore-station-0.8.2-upgrade.zip` from a **computer** to `/tmp/meshcore-station-0.8.2-upgrade.zip` on the VM.
+3. Extract the package and run its installer:
 
    ```bash
-   sudo mkdir -p /tmp/meshcore-081
-   sudo unzip -oq /tmp/meshcore-station-0.8.1-upgrade.zip -d /tmp/meshcore-081
-   sudo bash /tmp/meshcore-081/install.sh
+   sudo mkdir -p /tmp/meshcore-082
+   sudo unzip -oq /tmp/meshcore-station-0.8.2-upgrade.zip -d /tmp/meshcore-082
+   sudo bash /tmp/meshcore-082/install.sh
    ```
 
-4. Check `sudo docker compose ps api`, `sudo docker compose logs --tail=40 api`, and open **Messages**. The collector, radio, Grafana and digest do **not** need a restart.
-5. Once verified, publish from your Git working tree using `bash scripts/publish-0.8.1.sh` (regular user, **no sudo**). The script refuses a non-fast-forward push, so it cannot overwrite later GitHub commits.
+4. Verify `sudo docker compose ps api` and `sudo docker compose logs --tail=40 api`. Refresh **Messages** in your browser to see the compact list, click-to-expand details and `@ Reply`.
+5. After verification, publish from your Git working tree with `bash scripts/publish-0.8.2.sh` (**without sudo**). The script refuses non-fast-forward pushes and cannot overwrite newer GitHub commits.
 
-The upgrade backs up source files under `/var/backups/meshcore` and does not remove `.env`, `runtime/`, Docker volumes or database records. Never run `docker compose down -v` during an upgrade.
+The upgrade backs up replaced source files and rebuilds only the API container. It does **not** edit `.env`, database volumes, collector settings, firmware, Grafana, or email-digest configuration. Existing message history is preserved. Never use `docker compose down -v` for this update.
+
+**Reply behavior:** For channel messages, `@name` is ordinary message text; it does not guarantee a notification. For direct messages, a Reply is only prepared when the sender matches one unique public-key contact currently known to the T114. Unidentified senders require manually choosing a recipient; the UI will not guess.
 
 ## Version policy
 
 - `VERSION`, README, API `/api/version`, web footer and the current release notes must agree.
-- Git tags use `vMAJOR.MINOR.PATCH`, for example `v0.8.1`.
+- Git tags use `vMAJOR.MINOR.PATCH`, for example `v0.8.2`.
 - `scripts/check-release-version.sh` validates the release metadata before the publishing script commits or tags.
 - Published code is the source of truth; configuration secrets and database contents are never committed.
 
@@ -56,7 +58,8 @@ Packet counters include non-chat traffic, and counter resets must be accounted f
 ## Documentation and operations
 
 - [Quick start](QUICKSTART.md)
-- [0.8.1 release details](RELEASE-0.8.1.md)
+- [0.8.2 release details](RELEASE-0.8.2.md)
+- [0.8.1 message archive release](RELEASE-0.8.1.md)
 - [0.8.0 radio diagnostics](RELEASE-0.8.0.md)
 - [Grafana notes](GRAFANA-REFRESH-NOTES.md)
 - [Historical v7, v6, v5, v4 notes](V7-RELEASE-NOTES.md)

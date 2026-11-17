@@ -89,7 +89,7 @@ $('logout').addEventListener('click',async()=>{try{await request('/api/logout',{
 $('logout-mobile').addEventListener('click',()=>{$('logout').click()});
 $('refresh').addEventListener('click',refresh);
 $('message-text').addEventListener('input',()=>{$('char-count').textContent=$('message-text').value.length+' / 180'});
-$('send-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await enqueue({kind:'send',destination:$('destination').value,text:$('message-text').value});$('message-text').value='';$('char-count').textContent='0 / 180'}catch(err){toast(err.message,true)}finally{b.disabled=false}});
+$('send-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await enqueue({kind:'send',destination:$('destination').value,text:$('message-text').value});$('message-text').value='';$('char-count').textContent='0 / 180';$('reply-context').hidden=true}catch(err){toast(err.message,true)}finally{b.disabled=false}});
 for(const id of ['sync-contacts','overview-discover'])$(id).addEventListener('click',async()=>{try{await enqueue({kind:'contacts'})}catch(e){toast(e.message,true)}});
 $('advertise').addEventListener('click',async()=>{try{await enqueue({kind:'advert',flood:false})}catch(e){toast(e.message,true)}});
 $('all-alerts').addEventListener('click',async e=>{let id=e.target.dataset.resolve;if(!id)return;try{await request('/api/alerts/'+id+'/resolve',{method:'POST'});await refresh()}catch(err){toast(err.message,true)}});
@@ -449,32 +449,50 @@ function messageQuery081(filters,cursor){
  if(cursor){qs.set('before_ts',cursor.before_ts);qs.set('before_id',String(cursor.before_id));}
  return '/api/messages/history?'+qs.toString();
 }
+function compactTimestamp082(value){
+ if(!value)return '—';
+ const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+ const today=new Date();
+ const opts=(today.toDateString()===d.toDateString())?{hour:'numeric',minute:'2-digit'}:{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'};
+ return d.toLocaleString(undefined,opts);
+}
 function messageArchiveEntry081(m){
  const outgoing=m.direction==='out';
  const author=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
- const dest=m.kind==='channel'?`Channel ${m.target}`:`Direct ${outgoing?'message':'received'}`;
+ const dest=m.kind==='channel'?`#${m.target}`:'Direct';
  const status=outgoing?txLabel(m):'Received';
  const statusCss=!outgoing?'received':(/ack|repeat/i.test(status)?'verified':/fail/i.test(status)?'error':'unconfirmed');
  const evidence=(m.tx_evidence||[]).map(e=>{
   const label=({radio_accepted:'Radio accepted the send request',channel_echo:'Matching channel repeat heard · recipient unconfirmed',direct_ack:'Direct ACK received'})[e.kind]||e.kind;
   return `<li><time>${H(dt(e.ts))}</time><span>${H(label)}</span></li>`;
  }).join('');
- return `<article class="message-entry ${outgoing?'outbound':'inbound'}" data-message-id="${Number(m.id)}">
-  <header class="message-entry-header"><span class="message-direction" aria-hidden="true">${outgoing?'↗':'↙'}</span>
-   <div class="message-author"><strong>${H(author)}</strong><span>${H(dest)}</span></div>
-   <time datetime="${H(m.ts)}">${H(dt(m.ts))}</time></header>
-  <div class="message-copy">${H(m.text)}</div>
-  <div class="message-bottom"><span class="message-state ${statusCss}">${H(status)}</span>
-   <details class="message-details"><summary>Message details</summary>
-    <div class="message-detail-content"><dl><dt>Direction</dt><dd>${outgoing?'Sent':'Received'}</dd><dt>Destination</dt><dd>${H(m.target)}</dd><dt>Recorded status</dt><dd>${H(m.status)}</dd></dl>
-     ${outgoing?`<h3>Recorded TX evidence</h3>${evidence?`<ul>${evidence}</ul>`:'<p>No matching radio evidence recorded. This does not mean transmission failed.</p>'}`:'<p>Individual signal information is not available from this message record.</p>'}
-    </div></details></div></article>`;
+ const replyLabel=m.kind==='channel'?'@ Reply':'Reply privately';
+ return `<details class="message-row ${outgoing?'outbound':'inbound'}" data-message-id="${Number(m.id)}">
+  <summary class="message-row-summary" title="Expand message details">
+   <span class="message-row-direction" aria-label="${outgoing?'Sent':'Received'}" title="${outgoing?'Sent':'Received'}">${outgoing?'↗':'↙'}</span>
+   <strong class="message-row-sender" title="${H(author)}">${H(author)}</strong>
+   <span class="message-row-preview" title="${H(m.text)}">${H(m.text)}</span>
+   <span class="message-row-target">${H(dest)}</span>
+   <time class="message-row-time" datetime="${H(m.ts)}" title="${H(dt(m.ts))}">${H(compactTimestamp082(m.ts))}</time>
+   <span class="message-row-caret" aria-hidden="true">⌄</span>
+  </summary>
+  <div class="message-row-expanded">
+   <div class="message-row-top"><span class="message-state ${statusCss}">${H(status)}</span><span class="message-row-fulltime">${H(dt(m.ts))}</span></div>
+   <p class="message-row-body">${H(m.text)}</p>
+   <dl class="message-row-meta"><dt>From</dt><dd>${H(author)}</dd><dt>Direction</dt><dd>${outgoing?'Outgoing':'Incoming'}</dd><dt>Destination</dt><dd>${H(m.kind==='channel'?'Channel '+m.target:'Direct message')}</dd><dt>Status</dt><dd>${H(m.status)}</dd></dl>
+   ${outgoing?`<div class="message-row-evidence"><strong>TX evidence</strong>${evidence?`<ul>${evidence}</ul>`:'<p>No matching radio evidence recorded. This does not mean the transmission failed.</p>'}</div>`:''}
+   <div class="message-row-actions">
+    ${!outgoing?`<button type="button" class="button primary message-reply" data-reply-message="${Number(m.id)}">↩ ${replyLabel}</button>`:''}
+    <button type="button" class="button secondary" data-copy-message="${Number(m.id)}">Copy message</button>
+   </div>
+  </div>
+ </details>`;
 }
 function renderMessageArchive081(){
- const open=new Set([...document.querySelectorAll('.message-details[open]')].map(n=>n.closest('[data-message-id]')?.dataset.messageId));
+ const open=new Set([...document.querySelectorAll('.message-row[open]')].map(n=>n.dataset.messageId));
  const el=$('all-messages');
  el.innerHTML=M081.items.length?M081.items.map(messageArchiveEntry081).join(''):empty('No messages match these filters.');
- el.querySelectorAll('[data-message-id]').forEach(n=>{if(open.has(n.dataset.messageId))n.querySelector('details').open=true;});
+ el.querySelectorAll('[data-message-id]').forEach(n=>{if(open.has(n.dataset.messageId))n.open=true;});
  $('history-summary').textContent=`Showing ${M081.items.length.toLocaleString()} of ${M081.total.toLocaleString()} matching messages · newest first`;
  $('history-more').hidden=!M081.cursor;
  $('history-more').disabled=M081.loading;
@@ -525,3 +543,61 @@ $('history-more').addEventListener('click',loadOlderMessages081);
 // Keep the archive fresh while the Messages page is open, without reloading older pages.
 const refreshBefore081=refresh;
 refresh=async function(){await refreshBefore081();if(S.page==='messages')await refreshMessageHistoryTop081();};
+
+
+// 0.8.2 — Context-aware reply to an archived message. Plain @mentions on channels;
+// direct replies must uniquely match a radio contact's public key or key prefix.
+function resolveDirectSender082(sender){
+ const value=String(sender||'').trim().toLowerCase();
+ // Never resolve a direct-message identity by display name or a very short prefix.
+ if(!/^[a-f0-9]{8,128}$/.test(value))return null;
+ const matches=(S.contacts||[]).filter(c=>{
+  const key=String(c.key||'').trim().toLowerCase();
+  return key===value||(value.length>=8 && key.startsWith(value));
+ });
+ return matches.length===1?matches[0]:null;
+}
+function createReply082(id){
+ const m=M081.items.find(x=>Number(x.id)===Number(id));
+ if(!m || m.direction!=='in')return;
+ let dest,body='',notice='';
+ if(m.kind==='channel'){
+  if(!/^[0-7]$/.test(String(m.target||''))){toast('Original channel is unavailable for reply',true);return;}
+  dest='channel:'+m.target;
+  const known=resolveDirectSender082(m.sender);
+  const sender=String(known?.name||m.sender||'').replace(/[\x00-\x1f\x7f]/g,'').trim().replace(/^@+/, '').slice(0,70);
+  if(sender && !/^(unknown|channel)$/i.test(sender))body='@'+sender+' ';
+  notice=sender?`Reply to ${sender} on channel ${m.target}`:`Reply on channel ${m.target}`;
+ }else if(m.kind==='direct'){
+  const match=resolveDirectSender082(m.sender);
+  if(!match){toast('Direct sender is not uniquely identified in the T114 contacts. Sync contacts and choose the recipient manually.',true);return;}
+  dest=match.key;
+  notice=`Direct reply to ${match.name||short(match.key,14)}`;
+ }else{toast('Cannot reply to this message type',true);return;}
+ const select=$('destination');
+ if(![...select.options].some(o=>o.value===dest)){
+  toast(m.kind==='direct'?'Recipient is not available in the current radio contact list':'Channel is not available in the send composer',true);
+  return;
+ }
+ const input=$('message-text'),old=input.value;
+ if(old.trim() && select.value!==dest && !confirm('You have an unsent draft for another destination. Change destination and keep the draft?'))return;
+ const composed=body && !old.startsWith(body)?body+old:old;
+ if(composed.length>input.maxLength){toast('Reply mention plus existing draft exceeds the 180-character limit',true);return;}
+ select.value=dest;input.value=composed;input.dispatchEvent(new Event('input',{bubbles:true}));
+ $('reply-context-label').textContent=notice;
+ $('reply-context').hidden=false;
+ input.scrollIntoView({behavior:'smooth',block:'center'});
+ input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);
+}
+$('all-messages').addEventListener('click',async event=>{
+ const reply=event.target.closest('[data-reply-message]');
+ if(reply){createReply082(reply.dataset.replyMessage);return;}
+ const copy=event.target.closest('[data-copy-message]');
+ if(copy){
+  const m=M081.items.find(x=>Number(x.id)===Number(copy.dataset.copyMessage));
+  if(!m)return;
+  try{await navigator.clipboard.writeText(m.text);toast('Message copied');}
+  catch{toast('Browser blocked copying. Select and copy the expanded message text.',true);}
+ }
+});
+$('reply-cancel').addEventListener('click',()=>{$('reply-context').hidden=true;});
