@@ -61,6 +61,15 @@ class Message(Base):
     status = Column(String(32), nullable=False, default='received')
     meta = Column(JSON, default=dict)
 
+class TxEvidence(Base):
+    """Persistent evidence associated with one outbound message."""
+    __tablename__ = "tx_evidence"
+    id = Column(Integer, primary_key=True)
+    message_id = Column(Integer, nullable=False, index=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+    kind = Column(String(40), nullable=False)
+    detail = Column(JSON, default=dict)
+
 class RadioEvent(Base):
     __tablename__ = 'radio_events'
     id = Column(Integer, primary_key=True)
