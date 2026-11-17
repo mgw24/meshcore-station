@@ -10,7 +10,7 @@ import secrets
 import time
 import uuid
 import zipfile
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from prometheus_client import CollectorRegistry, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_
 from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
                             COOKIE_SECURE, SPOOL_DIR, RADIO_POWER_SOURCE)
 from station.geo import advertised_location, contact_role
@@ -37,7 +37,7 @@ from typing import Literal
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
 
-app = FastAPI(title='MeshCore Station 0.8.0', docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title='MeshCore Station 0.8.1', docs_url=None, redoc_url=None, openapi_url=None)
 BASE = Path(__file__).resolve().parent.parent
 app.mount('/assets', StaticFiles(directory=BASE / 'static'), name='assets')
 signer = URLSafeTimedSerializer(SESSION_SECRET, salt='meshcore-station-auth')
@@ -133,7 +133,7 @@ def status(session=Depends(user_session)):
 
 @app.get('/api/version')
 def version(session=Depends(user_session)):
-    return {'version': '0.8.0', 'release': 'Radio Diagnostics'}
+    return {'version': '0.8.1', 'release': 'Messages & Release Consistency'}
 
 @app.get('/api/radio/diagnostics')
 def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
@@ -168,7 +168,7 @@ def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
     def val(key):
         row = status_rows.get(key)
         return (row.value or {}) if row else {}
-    return {'version': '0.8.0', 'window_hours': hours,
+    return {'version': '0.8.1', 'window_hours': hours,
             'collector_online': bool(age is not None and age < 35 and reported.get('connected')),
             'heartbeat_age_secs': age, 'traffic': sample_window(samples, now),
             'routing': {'observed': val('routing_observed'),
@@ -189,21 +189,82 @@ def contacts(session=Depends(user_session)):
                  'first_seen': c.first_seen.isoformat(), 'last_seen': c.last_seen.isoformat(),
                  'detail': c.detail} for c in rows]
 
+def iso_message_time(value):
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
+
+
+def serialize_messages(db, rows):
+    """A single safe message representation for overview and history views."""
+    ids = [m.id for m in rows if m.direction == 'out']
+    evidence = {}
+    if ids:
+        for event in db.scalars(select(TxEvidence).where(TxEvidence.message_id.in_(ids))
+                                .order_by(TxEvidence.id)).all():
+            evidence.setdefault(event.message_id, []).append({
+                'kind': event.kind, 'ts': iso_message_time(event.ts),
+                'detail': event.detail if event.kind == 'channel_echo' else {}})
+    return [{'id': m.id, 'ts': iso_message_time(m.ts), 'direction': m.direction,
+             'kind': m.kind, 'target': m.target, 'sender': m.sender,
+             'text': m.body, 'status': m.status,
+             'tx_evidence': evidence.get(m.id, [])} for m in rows]
+
+
 @app.get('/api/messages')
 def messages(limit: int = 200, session=Depends(user_session)):
+    """Keep the original endpoint contract for existing pages/integrations."""
     with Session() as db:
-        rows = db.scalars(select(Message).order_by(Message.ts.desc()).limit(min(max(limit, 1), 2000))).all()
-        ids = [m.id for m in rows if m.direction == 'out']
-        evidence = {}
-        if ids:
-            for e in db.scalars(select(TxEvidence).where(TxEvidence.message_id.in_(ids)).order_by(TxEvidence.id)).all():
-                evidence.setdefault(e.message_id, []).append({
-                    'kind': e.kind, 'ts': e.ts.isoformat(),
-                    'detail': e.detail if e.kind == 'channel_echo' else {}})
-        return [{'id': m.id, 'ts': m.ts.isoformat(), 'direction': m.direction, 'kind': m.kind,
-                 'target': m.target, 'sender': m.sender, 'text': m.body, 'status': m.status,
-                 'tx_evidence': evidence.get(m.id, [])}
-                for m in rows]
+        rows = db.scalars(select(Message).order_by(Message.ts.desc(), Message.id.desc())
+                          .limit(min(max(limit, 1), 2000))).all()
+        return serialize_messages(db, rows)
+
+
+@app.get('/api/messages/history')
+def message_history(limit: int = 50, direction: Literal['all', 'in', 'out'] = 'all',
+                    destination: str = 'all', q: str = '',
+                    before_ts: datetime | None = None, before_id: int | None = None,
+                    session=Depends(user_session)):
+    """Server-side searchable archive with keyset pagination (stable when new messages arrive)."""
+    if not 1 <= limit <= 100:
+        raise HTTPException(400, 'Page size must be between 1 and 100')
+    if len(q) > 120:
+        raise HTTPException(400, 'Search is limited to 120 characters')
+    if (before_ts is None) != (before_id is None) or (before_id is not None and before_id < 1):
+        raise HTTPException(400, 'Invalid history cursor')
+    if before_ts is not None and before_ts.tzinfo is None:
+        raise HTTPException(400, 'History cursor must include a timezone')
+    filters = []
+    if direction != 'all':
+        filters.append(Message.direction == direction)
+    if destination == 'direct':
+        filters.append(Message.kind == 'direct')
+    elif destination != 'all':
+        if not re.fullmatch(r'channel:[0-7]', destination):
+            raise HTTPException(400, 'Invalid destination filter')
+        filters.extend([Message.kind == 'channel', Message.target == destination.split(':')[1]])
+    if q.strip():
+        # Escape SQL LIKE wildcards so a literal user search never becomes an unbounded pattern.
+        term = q.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        pattern = '%' + term + '%'
+        filters.append(or_(Message.body.ilike(pattern, escape='\\'),
+                           Message.sender.ilike(pattern, escape='\\'),
+                           Message.target.ilike(pattern, escape='\\')))
+    with Session() as db:
+        total = db.scalar(select(func.count(Message.id)).where(*filters)) or 0
+        cursor_filter = []
+        if before_ts is not None:
+            cursor_filter.append(or_(Message.ts < before_ts,
+                                     and_(Message.ts == before_ts, Message.id < before_id)))
+        rows = db.scalars(select(Message).where(*filters, *cursor_filter)
+                          .order_by(Message.ts.desc(), Message.id.desc())
+                          .limit(limit + 1)).all()
+        has_more = len(rows) > limit
+        page = rows[:limit]
+        last = page[-1] if page else None
+        return {'items': serialize_messages(db, page), 'total': total,
+                'has_more': has_more,
+                'next_cursor': {'before_ts': iso_message_time(last.ts), 'before_id': last.id}
+                               if has_more and last is not None else None}
+
 
 @app.get('/api/tx/diagnostics')
 def tx_diagnostics(session=Depends(user_session)):

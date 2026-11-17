@@ -17,7 +17,7 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
@@ -54,10 +54,17 @@ function plot(element, values, key, unit){
   target.innerHTML=`<svg role="img" aria-label="${H(key)} history chart" viewBox="0 0 ${width} ${height}">${grid}<polyline fill="none" stroke="#42d7bf" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${p}"/><circle cx="${pt[n-1][0]}" cy="${pt[n-1][1]}" r="5" fill="#42d7bf"/><text x="690" y="205" text-anchor="end" fill="#8caaba" font-size="12">${H(new Date(list[n-1].ts).toLocaleTimeString())} · ${list[n-1][key].toFixed(1)} ${H(unit)}</text></svg>`;
 }
 function fillDestinations(){let old=$('destination').value;const channels=(S.status?.channels?.length?S.status.channels:Array.from({length:8},(_,i)=>({index:i,name:'Channel '+i})));$('destination').innerHTML=channels.map(c=>`<option value="channel:${c.index}">${H(c.name)} (#${c.index})</option>`).join('')+S.contacts.map(x=>`<option value="${H(x.key)}">${H(x.name)} (${H(short(x.key,12))})</option>`).join('');if([...$('destination').options].some(o=>o.value===old))$('destination').value=old}
+function fillArchiveDestinations(){
+ const select=$('history-destination');if(!select)return;
+ const previous=select.value;
+ const labels=new Map((S.status?.channels||[]).map(c=>[Number(c.index),c.name]));
+ const channels=Array.from({length:8},(_,i)=>({index:i,name:labels.get(i)||'Channel '+i}));
+ select.innerHTML='<option value="all">All conversations</option><option value="direct">Direct messages</option>'+channels.map(c=>`<option value="channel:${c.index}">${H(c.name||'Channel '+c.index)} (#${c.index})</option>`).join('');
+ if([...select.options].some(x=>x.value===previous))select.value=previous;
+}
 function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  const st=S.status, radio=st.radio||{};$('mode-badge').textContent='USB SERIAL';$('mode-badge').className='pill';$('connection-badge').textContent=radio.connected?'● Connected':'● Offline';$('connection-badge').className='pill '+(radio.connected?'':'red');$('kpi-radio').textContent=radio.connected?'Online':'Offline';$('kpi-device').textContent=radio.error||radio.device||'Awaiting device';$('kpi-nodes').textContent=st.counts.contacts;const sync=st.contact_sync||{};const syncText=typeof sync.radio_contacts==='number'?`${sync.radio_contacts} on radio · +${sync.new_in_sync||0} new at last sync`:'Awaiting radio contact sync';$('nodes-kpi-detail').textContent=syncText;$('contact-sync-summary').textContent=`${syncText}${sync.sync_at?' · '+dt(sync.sync_at):''}. RX packets do not increase this count automatically.`;$('kpi-messages').textContent=st.counts.messages;$('power-title').textContent=st.power_source==='usb'?'POWER SOURCE':'BATTERY';$('kpi-battery').textContent=st.power_source==='usb'?'USB Powered':(st.sample?.battery_pct!=null ? st.sample.battery_pct.toFixed(0)+'%' : '—');$('kpi-battery').style.fontSize=st.power_source==='usb'?'1.35rem':'';$('power-caption').textContent=st.power_source==='usb'?'No battery installed':'Most recent telemetry';$('battery-panel').hidden=st.power_source==='usb';
  const rec=S.messages.slice(0,7);$('recent-messages').innerHTML=rec.length?rec.map(m=>item(messageHeading(m),m.text,m.ts,m.direction)).join(''):empty('No messages yet');
- $('all-messages').innerHTML=S.messages.length?S.messages.map(m=>item(messageHeading(m),`${m.text} · ${txLabel(m)}`,m.ts,m.direction)).join(''):empty('No messages yet');
  $('recent-nodes').innerHTML=S.contacts.length?S.contacts.slice(0,6).map(n=>`<div class="node-row">${nodeTag(n.role)}${item(n.name,short(n.key,36),n.last_seen)}</div>`).join(''):empty('No contacts discovered');
  $('contacts-table').innerHTML=S.contacts.length?S.contacts.map(n=>`<tr><td>${H(n.name)}</td><td>${nodeTag(n.role)}</td><td><code title="${H(n.key)}">${H(short(n.key,40))}</code></td><td>${H(dt(n.last_seen))}</td><td><button class="subtle" type="button" data-save-contact="${H(n.key)}">Save ↗</button></td></tr>`).join(''):`<tr><td colspan="5">No contacts discovered yet</td></tr>`;
  $('recent-alerts').innerHTML=S.alerts.filter(a=>!a.resolved).length?S.alerts.filter(a=>!a.resolved).slice(0,5).map(a=>item(a.severity.toUpperCase(),a.message,a.ts,'danger')).join(''):empty('No active alerts');
@@ -66,7 +73,7 @@ function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  $('telemetry-info').textContent=JSON.stringify({radio,latest:st.sample,known_contacts:st.counts.contacts,logged_messages:st.counts.messages,raw_radio_stats:st.last_stats},null,2);
  plot('overview-chart',S.history,'noise','dBm');plot('noise-chart',S.history,'noise','dBm');if(st.power_source!=='usb')plot('battery-chart',S.history,'battery','%');plot('rx-chart',S.history,'packets_rx','packets');plot('rssi-chart',S.history,'rssi','dBm');
  $('firmware-jobs').innerHTML=S.jobs.length?S.jobs.map(j=>`<div class="stream-item"><span class="dot ${['failed','error'].includes(j.status)?'danger':j.status==='complete'?'':'warn'}"></span><div class="stream-main"><div class="stream-title">${H(j.filename||j.id)}</div><div class="stream-body">${H(j.status)} · ${H(j.message||'')}</div></div><button class="subtle" data-job="${H(j.id)}">Logs</button></div>`).join(''):empty('No firmware updates yet');
- $('radio-channel-list').textContent=(st.channels||[]).map(c=>`${c.index}: ${c.name||'(empty)'}`).join(' · ')||'No channel information';$('last-refresh').textContent='Refreshed '+new Date().toLocaleTimeString();fillDestinations();
+ $('radio-channel-list').textContent=(st.channels||[]).map(c=>`${c.index}: ${c.name||'(empty)'}`).join(' · ')||'No channel information';$('last-refresh').textContent='Refreshed '+new Date().toLocaleTimeString();fillDestinations();fillArchiveDestinations();
 }
 let loading=false;
 async function refresh(){if(!S.csrf || loading)return;loading=true;try{
@@ -429,3 +436,92 @@ $('diag-refresh').addEventListener('click',()=>refreshDiagnostics().catch(e=>toa
 // Refresh the diagnostics only when its page is visible; no extra USB polling.
 const oldRefresh08=refresh;
 refresh=async function(){await oldRefresh08();if(S.page==='diagnostics')await refreshDiagnostics().catch(e=>toast(e.message,true));};
+
+// 0.8.1 — Message archive: server-side filters and timestamp/id cursor pagination.
+// This is separate from the short recent-message list on Overview.
+const M081={items:[],total:0,cursor:null,loading:false,seq:0,signature:'',started:false};
+function messageFilters081(){return {
+ q:$('history-search').value.trim(), direction:$('history-direction').value,
+ destination:$('history-destination').value
+};}
+function messageQuery081(filters,cursor){
+ const qs=new URLSearchParams({limit:'50',...filters});
+ if(cursor){qs.set('before_ts',cursor.before_ts);qs.set('before_id',String(cursor.before_id));}
+ return '/api/messages/history?'+qs.toString();
+}
+function messageArchiveEntry081(m){
+ const outgoing=m.direction==='out';
+ const author=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
+ const dest=m.kind==='channel'?`Channel ${m.target}`:`Direct ${outgoing?'message':'received'}`;
+ const status=outgoing?txLabel(m):'Received';
+ const statusCss=!outgoing?'received':(/ack|repeat/i.test(status)?'verified':/fail/i.test(status)?'error':'unconfirmed');
+ const evidence=(m.tx_evidence||[]).map(e=>{
+  const label=({radio_accepted:'Radio accepted the send request',channel_echo:'Matching channel repeat heard · recipient unconfirmed',direct_ack:'Direct ACK received'})[e.kind]||e.kind;
+  return `<li><time>${H(dt(e.ts))}</time><span>${H(label)}</span></li>`;
+ }).join('');
+ return `<article class="message-entry ${outgoing?'outbound':'inbound'}" data-message-id="${Number(m.id)}">
+  <header class="message-entry-header"><span class="message-direction" aria-hidden="true">${outgoing?'↗':'↙'}</span>
+   <div class="message-author"><strong>${H(author)}</strong><span>${H(dest)}</span></div>
+   <time datetime="${H(m.ts)}">${H(dt(m.ts))}</time></header>
+  <div class="message-copy">${H(m.text)}</div>
+  <div class="message-bottom"><span class="message-state ${statusCss}">${H(status)}</span>
+   <details class="message-details"><summary>Message details</summary>
+    <div class="message-detail-content"><dl><dt>Direction</dt><dd>${outgoing?'Sent':'Received'}</dd><dt>Destination</dt><dd>${H(m.target)}</dd><dt>Recorded status</dt><dd>${H(m.status)}</dd></dl>
+     ${outgoing?`<h3>Recorded TX evidence</h3>${evidence?`<ul>${evidence}</ul>`:'<p>No matching radio evidence recorded. This does not mean transmission failed.</p>'}`:'<p>Individual signal information is not available from this message record.</p>'}
+    </div></details></div></article>`;
+}
+function renderMessageArchive081(){
+ const open=new Set([...document.querySelectorAll('.message-details[open]')].map(n=>n.closest('[data-message-id]')?.dataset.messageId));
+ const el=$('all-messages');
+ el.innerHTML=M081.items.length?M081.items.map(messageArchiveEntry081).join(''):empty('No messages match these filters.');
+ el.querySelectorAll('[data-message-id]').forEach(n=>{if(open.has(n.dataset.messageId))n.querySelector('details').open=true;});
+ $('history-summary').textContent=`Showing ${M081.items.length.toLocaleString()} of ${M081.total.toLocaleString()} matching messages · newest first`;
+ $('history-more').hidden=!M081.cursor;
+ $('history-more').disabled=M081.loading;
+}
+async function reloadMessageHistory(){
+ if(!S.csrf)return;
+ const seq=++M081.seq, filters=messageFilters081();
+ M081.signature=JSON.stringify(filters);M081.loading=true;
+ $('history-summary').textContent='Loading message history…';$('history-more').disabled=true;
+ try{
+  const data=await request(messageQuery081(filters));if(seq!==M081.seq)return;
+  M081.items=data.items;M081.total=data.total;M081.cursor=data.next_cursor;M081.started=true;
+  renderMessageArchive081();
+ }catch(e){if(seq===M081.seq){$('history-summary').textContent='History unavailable: '+e.message;toast(e.message,true);}}
+ finally{if(seq===M081.seq){M081.loading=false;$('history-more').disabled=false;}}
+}
+async function loadOlderMessages081(){
+ if(M081.loading||!M081.cursor)return;
+ const seq=M081.seq, filters=messageFilters081();
+ M081.loading=true;$('history-more').disabled=true;
+ try{
+  const page=await request(messageQuery081(filters,M081.cursor));if(seq!==M081.seq)return;
+  const ids=new Set(M081.items.map(m=>m.id));for(const m of page.items)if(!ids.has(m.id)){M081.items.push(m);ids.add(m.id);}
+  M081.total=page.total;M081.cursor=page.next_cursor;renderMessageArchive081();
+ }catch(e){toast('Could not load older messages: '+e.message,true);}
+ finally{M081.loading=false;$('history-more').disabled=false;}
+}
+async function refreshMessageHistoryTop081(){
+ if(S.page!=='messages'||!M081.started||M081.loading)return;
+ const filters=messageFilters081();if(JSON.stringify(filters)!==M081.signature)return;
+ const seq=M081.seq;
+ try{
+  const data=await request(messageQuery081(filters));if(seq!==M081.seq)return;
+  const merged=new Map(M081.items.map(m=>[m.id,m]));for(const m of data.items)merged.set(m.id,m);
+  const rows=[...merged.values()].sort((a,b)=>new Date(b.ts)-new Date(a.ts)||b.id-a.id);
+  const changed=JSON.stringify(rows)!==JSON.stringify(M081.items)||M081.total!==data.total;
+  M081.items=rows;M081.total=data.total;
+  if(!M081.cursor)M081.cursor=data.next_cursor;
+  if(changed)renderMessageArchive081();
+ }catch(e){/* Existing history remains visible through a transient refresh failure. */}
+}
+let historySearchTimer081=null;
+$('history-search').addEventListener('input',()=>{clearTimeout(historySearchTimer081);historySearchTimer081=setTimeout(reloadMessageHistory,300)});
+for(const field of ['history-direction','history-destination'])$(field).addEventListener('change',reloadMessageHistory);
+$('history-clear').addEventListener('click',()=>{$('history-search').value='';$('history-direction').value='all';$('history-destination').value='all';reloadMessageHistory();});
+$('history-refresh').addEventListener('click',reloadMessageHistory);
+$('history-more').addEventListener('click',loadOlderMessages081);
+// Keep the archive fresh while the Messages page is open, without reloading older pages.
+const refreshBefore081=refresh;
+refresh=async function(){await refreshBefore081();if(S.page==='messages')await refreshMessageHistoryTop081();};

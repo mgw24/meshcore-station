@@ -85,3 +85,62 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 .diag-message ol{margin:12px 0 0;padding-left:24px;font-size:.83rem;line-height:1.8;color:var(--muted)}
 .diag-message li{padding:5px 0}.diag-message li time{margin-right:12px}
 @media(max-width:720px){.diag-message summary{flex-wrap:wrap}.diag-bars{height:155px}.diag-message li time{display:block}}
+
+/* 0.8.1 Messages: compact composer above a full-width, page-scrolling archive. */
+.messages-view{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+.messages-view .panel{margin:0}
+.composer-panel{padding:20px 24px}
+.composer-head{margin-bottom:10px}
+.composer-label{font-size:.72rem;color:var(--muted);white-space:nowrap}
+.composer-grid{display:grid;grid-template-columns:minmax(200px,.8fr) minmax(0,2.2fr);gap:16px;align-items:start}
+.composer-grid label{margin-bottom:0}
+.composer-grid textarea{min-height:76px;max-height:160px}
+.composer-grid select{height:45px}
+.composer-bottom{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-top:12px}
+.composer-note{font-size:.74rem;line-height:1.55;color:var(--muted);max-width:650px}
+.composer-send{display:flex;align-items:center;justify-content:flex-end;gap:16px;white-space:nowrap}
+.composer-send .muted{font-size:.74rem;font-variant-numeric:tabular-nums}
+.composer-send .button{min-width:120px}
+.archive-panel{padding:24px;min-height:650px}
+.history-heading{align-items:center;margin-bottom:20px}
+.history-heading h2{font-size:1.3rem;letter-spacing:-.015em}
+.history-description{font-size:.8rem;color:var(--muted);margin-top:6px}
+.history-toolbar{display:grid;grid-template-columns:minmax(220px,2fr) minmax(145px,.75fr) minmax(175px,.9fr) auto;gap:12px;align-items:end;background:#0e1a25;border:1px solid #263e4b;border-radius:10px;padding:14px}
+.history-toolbar label{margin:0;font-size:.72rem}
+.history-toolbar input,.history-toolbar select{height:44px;min-width:0;margin-top:7px}
+.history-toolbar .button{height:44px}
+.history-toolbar-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:17px 2px 14px;color:var(--muted);font-size:.75rem;font-variant-numeric:tabular-nums}
+.message-archive{display:grid;gap:11px;align-content:start;min-height:390px}
+.message-entry{background:linear-gradient(130deg,#122532,#101d28 65%);border:1px solid #2a414f;border-radius:11px;padding:17px 18px;position:relative;overflow:hidden}
+.message-entry::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:#65a7d6}
+.message-entry.outbound::before{background:#42d7bf}
+.message-entry:hover{border-color:#436575}
+.message-entry-header{display:flex;align-items:center;gap:13px}
+.message-direction{display:grid;place-items:center;flex:0 0 35px;width:35px;height:35px;border-radius:10px;color:#78bcef;background:#18384f;font-size:1.2rem}
+.message-entry.outbound .message-direction{background:#153c3a;color:#4bdfc7}
+.message-author{display:grid;gap:2px;min-width:0;flex:1}
+.message-author strong{font-size:.9rem;font-weight:680;overflow-wrap:anywhere}
+.message-author span{font-size:.72rem;color:var(--muted)}
+.message-entry-header time{font-size:.73rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.message-copy{font-size:.92rem;line-height:1.65;margin:14px 0 12px 48px;white-space:pre-wrap;overflow-wrap:anywhere}
+.message-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center;margin-left:48px}
+.message-state{font-size:.74rem;font-weight:560;color:#a8d5f2;border:1px solid #35566b;background:#183046;padding:6px 10px;border-radius:18px}
+.message-state.verified{color:#63e0ca;border-color:#27685e;background:#153a35}
+.message-state.unconfirmed{color:#edc982;border-color:#665137;background:#382c23}
+.message-state.error{color:#ff9999;border-color:#7f4245;background:#3e232b}
+.message-details{font-size:.76rem;color:#aec1cb;margin-left:auto;max-width:100%}
+.message-details summary{list-style:none;cursor:pointer;padding:5px 0;text-decoration:underline;text-underline-offset:4px;outline-offset:5px}
+.message-details summary::-webkit-details-marker{display:none}
+.message-details summary::after{content:"  ▾"}
+.message-details[open] summary::after{content:"  ▴"}
+.message-detail-content{margin-top:13px;padding:13px 15px;background:#0c1a24;border:1px solid #2b4451;border-radius:8px;line-height:1.55;min-width:min(420px,75vw)}
+.message-detail-content dl{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:16px;row-gap:6px}
+.message-detail-content dt{color:#7297a8}.message-detail-content dd{margin:0;overflow-wrap:anywhere}
+.message-detail-content h3{margin:13px 0 7px}.message-detail-content ul{margin:6px 0 0;padding-left:18px}
+.message-detail-content li{margin:6px 0}.message-detail-content li time{display:block;color:#819dad;font-size:.72rem}
+.message-detail-content p{margin:12px 0 0;color:#93aaba}
+.archive-bottom{display:flex;flex-direction:column;align-items:center;gap:14px;margin:23px auto 6px;color:var(--muted);font-size:.73rem}
+.archive-bottom .button{min-width:210px}
+@media(max-width:1120px){.history-toolbar{grid-template-columns:minmax(200px,1.3fr) repeat(2,minmax(135px,1fr))}.history-toolbar .button{grid-column:1/-1;justify-self:start}}
+@media(max-width:760px){.messages-view{gap:12px}.composer-panel,.archive-panel{padding:16px}.composer-grid{grid-template-columns:1fr;gap:13px}.composer-grid textarea{min-height:66px}.composer-head,.composer-bottom{align-items:flex-start;flex-direction:column}.composer-send{width:100%;justify-content:space-between}.composer-send .button{min-width:140px}.history-heading{gap:12px}.history-toolbar{grid-template-columns:1fr 1fr;gap:10px;padding:12px}.history-search-field{grid-column:1/-1}.history-toolbar .button{grid-column:1/-1;width:100%}.history-toolbar-footer{flex-wrap:wrap}.message-entry{padding:14px 12px}.message-entry-header time{white-space:normal;text-align:right;font-size:.68rem}.message-copy,.message-bottom{margin-left:0}.message-author strong{font-size:.85rem}.message-direction{height:30px;width:30px;flex-basis:30px}.message-detail-content{min-width:0;width:100%}}
+@media(max-width:430px){.history-toolbar{grid-template-columns:1fr}.history-search-field{grid-column:auto}.history-heading .button{width:100%;text-align:center}.history-heading{align-items:stretch}.message-entry-header{flex-wrap:wrap}.message-entry-header time{flex-basis:100%;text-align:left;margin-left:42px}.message-bottom{flex-direction:column;align-items:flex-start}.message-details{margin-left:0;width:100%}}

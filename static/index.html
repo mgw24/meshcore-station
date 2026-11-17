@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=8"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=081"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -25,7 +25,7 @@
   </nav><div class="nav-label">MAINTENANCE</div>
   <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
-  </nav><div class="side-footer"><div>MeshCore 0.8.0 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+  </nav><div class="side-footer"><div>MeshCore 0.8.1 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
   <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
@@ -42,12 +42,31 @@
 <div class="two-col"><article class="panel"><div class="panel-head"><h2>Recently discovered nodes</h2><button id="overview-discover" class="subtle">Sync contacts ↻</button></div><div id="recent-nodes" class="stream"></div></article>
 <article class="panel"><div class="panel-head"><h2>Active alerts</h2></div><div id="recent-alerts" class="stream"></div></article></div>
 </section>
-<section id="view-messages" class="view" hidden><div class="two-col messaging-grid"><article class="panel">
-  <div class="panel-head"><div><span class="eyebrow">RF MESSAGING</span><h2>Send message</h2></div></div>
-  <form id="send-form"><label>Recipient or channel<select id="destination" required><option value="channel:0">Channel 0</option></select></label>
-  <label>Message<textarea id="message-text" rows="5" maxlength="180" placeholder="Type a short radio message…" required></textarea></label>
-  <div class="form-row"><span id="char-count" class="muted">0 / 180</span><button class="button primary" type="submit">Transmit ↗</button></div><p class="hint">Direct sends are initially marked “sent/unconfirmed” until acknowledged. Channel messages do not have a direct-message ACK.</p>
-  </form></article><article class="panel"><div class="panel-head"><h2>Message history</h2><a href="/api/export/messages.csv" id="export-messages" class="subtle">Export CSV ↓</a></div><div id="all-messages" class="stream tall"></div></article></div></section>
+<section id="view-messages" class="view messages-view" hidden>
+ <article class="panel composer-panel" aria-labelledby="composer-heading">
+  <div class="panel-head composer-head"><div><span class="eyebrow">RF MESSAGING</span><h2 id="composer-heading">Compose a message</h2></div><span class="composer-label">USB Companion · queued radio send</span></div>
+  <form id="send-form">
+   <div class="composer-grid">
+    <label class="composer-recipient">Recipient or channel<select id="destination" required><option value="channel:0">Public (#0)</option></select></label>
+    <label class="composer-message">Message<textarea id="message-text" rows="2" maxlength="180" placeholder="Write a short message to your mesh…" required></textarea></label>
+   </div>
+   <div class="composer-bottom"><span class="composer-note">Channel sends have no recipient ACK. Radio accepted does not mean delivered.</span>
+    <div class="composer-send"><span id="char-count" class="muted">0 / 180</span><button class="button primary" type="submit">Transmit ↗</button></div></div>
+  </form>
+ </article>
+ <article class="panel archive-panel" aria-labelledby="history-heading">
+  <div class="panel-head history-heading"><div><span class="eyebrow">MESSAGE ARCHIVE</span><h2 id="history-heading">Message history</h2><p class="history-description">Full-width chronological log of received and outgoing messages</p></div><a href="/api/export/messages.csv" id="export-messages" class="button secondary">Export all CSV ↓</a></div>
+  <div class="history-toolbar">
+   <label class="history-search-field">Search message or sender<input id="history-search" type="search" maxlength="120" autocomplete="off" placeholder="Search text, sender, or destination…"></label>
+   <label>Direction<select id="history-direction"><option value="all">All directions</option><option value="in">Received</option><option value="out">Sent</option></select></label>
+   <label>Conversation<select id="history-destination"><option value="all">All conversations</option><option value="direct">Direct messages</option></select></label>
+   <button id="history-clear" class="button secondary" type="button">Clear filters</button>
+  </div>
+  <div class="history-toolbar-footer"><p id="history-summary" role="status" aria-live="polite">Loading message history…</p><button id="history-refresh" class="subtle" type="button">Refresh ↻</button></div>
+  <div id="all-messages" class="message-archive" aria-label="Message history" aria-live="polite"></div>
+  <div class="archive-bottom"><button id="history-more" class="button secondary" type="button" hidden>Load older messages ↓</button><span id="history-footnote">Radio acceptance is not a receipt confirmation.</span></div>
+ </article>
+</section>
 <section id="view-nodes" class="view" hidden><article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERY</span><h2>Known contacts</h2></div><div class="actions"><button id="sync-contacts" class="button secondary">Refresh from radio</button><button id="advertise" class="button secondary">Advertise node</button></div></div><p id="contact-sync-summary" class="hint">Waiting for contact sync</p><div class="table-scroll"><table><thead><tr><th>NAME</th><th>ROLE</th><th>PUBLIC KEY</th><th>LAST SEEN IN CONTACT LIST</th><th>ADDRESS BOOK</th></tr></thead><tbody id="contacts-table"></tbody></table></div><p class="hint">Contact-list refresh timestamps represent when the local radio reports the contact, not necessarily the last time it transmitted over the air.</p></article></section>
 <section id="view-address" class="view" hidden>
  <div class="two-col messaging-grid">
@@ -96,7 +115,7 @@
 <div id="map-canvas" class="node-map" role="region" aria-label="Interactive MeshCore node map"><div class="map-tiles" id="map-tiles"></div><div class="map-pins" id="map-pins"></div><div class="map-fallback" id="map-fallback" hidden>Base-map tiles are unavailable. Node positions remain visible on the coordinate grid.</div><div class="map-attribution">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div></div><p id="map-summary" class="hint"></p></article>
 <article class="panel"><div class="panel-head"><h2>Unmapped contacts and location overrides</h2></div><div id="map-unmapped" class="stream"></div><form id="manual-location-form" class="map-location-form"><label>Contact<select id="map-contact" required></select></label><label>Latitude<input id="map-lat" type="number" min="-90" max="90" step="any" required></label><label>Longitude<input id="map-lon" type="number" min="-180" max="180" step="any" required></label><button class="button secondary" type="submit">Save manual location</button><button class="button secondary" type="button" id="map-clear">Clear manual location</button></form><p class="hint">Manual coordinates override advertised values until cleared. Node presence on the map does not mean the radio is currently reachable.</p></article></section>
 <section id="view-diagnostics" class="view" hidden>
-  <div class="panel-head"><div><span class="eyebrow">RADIO DIAGNOSTICS · 0.8.0</span><h2>Traffic, routing &amp; transmission evidence</h2></div>
+  <div class="panel-head"><div><span class="eyebrow">RADIO DIAGNOSTICS · 0.8.1</span><h2>Traffic, routing &amp; transmission evidence</h2></div>
     <div class="actions"><label class="rx-filter">Window<select id="diag-window"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label><button class="button secondary" id="diag-refresh" type="button">Refresh diagnostics</button></div></div>
   <div class="kpis" id="diag-kpis" aria-live="polite"></div>
   <div class="two-col">
@@ -125,7 +144,7 @@
  <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
 </section>
 <section id="view-routing" class="view" hidden>
- <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.0</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
+ <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.1</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
  <div class="two-col">
   <article class="panel"><h2>Path hash</h2><p class="hint">Longer paths help identify repeaters, but older repeaters may drop 2- and 3-byte hash packets.</p>
    <p id="routing-current-hash" class="hint">Current hardware mode: not read</p>
@@ -209,4 +228,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=8"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=081"></script></body></html>
