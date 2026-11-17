@@ -54,3 +54,12 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 .digest-preview{max-height:620px;overflow:auto;white-space:pre-wrap;line-height:1.5}
 @media(max-width:1100px){.digest-layout{grid-template-columns:1fr}.check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.field-grid,.check-grid{grid-template-columns:1fr}.digest-sections .actions .button{flex:1 1 140px}}
+
+/* v6 routing control groups: responsive and keyboard accessible */
+.routing-tags{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+.routing-chip{display:inline-flex;gap:.55rem;align-items:center;padding:.4rem .65rem;border:1px solid var(--line,#355366);border-radius:22px;background:rgba(64,137,164,.13);font-size:.9rem}
+.routing-chip button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:1.2rem}
+.routing-channels{display:grid;gap:.7rem}
+.routing-channel{display:flex;gap:.7rem;justify-content:space-between;align-items:center}
+.routing-channel select{max-width:230px}
+@media(max-width:640px){.routing-channel{flex-direction:column;align-items:stretch}.routing-channel select{max-width:none}}

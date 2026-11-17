@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=5"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=6"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -22,7 +22,7 @@
     <button class="nav" data-view="alerts">◈ <span>Alerts</span></button>
     <button class="nav" data-view="events">☷ <span>Event Log</span></button>
   </nav><div class="nav-label">MAINTENANCE</div>
-  <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
+  <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
   </nav><div class="side-footer"><div>MeshCore USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
@@ -107,6 +107,35 @@
  <button class="button danger" type="submit">Remove channel</button></form>
  <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
 </section>
+<section id="view-routing" class="view" hidden>
+ <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · v6</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
+ <div class="two-col">
+  <article class="panel"><h2>Path hash</h2><p class="hint">Longer paths help identify repeaters, but older repeaters may drop 2- and 3-byte hash packets.</p>
+   <p id="routing-current-hash" class="hint">Current hardware mode: not read</p>
+   <label>Path hash size<select id="routing-hash"><option value="">Keep hardware setting unchanged</option><option value="1">1 byte per hop — best compatibility</option><option value="2">2 bytes per hop — modern repeaters</option><option value="3">3 bytes per hop — modern repeaters</option></select></label>
+  </article>
+  <article class="panel"><h2>Default outgoing scope</h2><p class="hint">Unscoped sends remain the safest option for broad compatibility until your network's region codes are confirmed. This does not change RF frequencies.</p>
+   <p id="routing-scope-current" class="hint">Scope status: not configured by Station</p>
+   <label class="check-label"><input type="checkbox" id="routing-apply-default"> Change default outgoing region scope</label>
+   <label>Default scope<select id="routing-default"><option value="">Unscoped — no region restriction</option></select></label>
+   <p class="hint">The firmware does not provide a reliable scope readback through the installed SDK. This setting is app-managed and reapplied after collector reconnects.</p>
+  </article>
+ </div>
+ <div class="two-col">
+  <article class="panel"><h2>Saved region codes</h2><p class="hint">Local code list. Names are community-defined, not automatically valid for Spokane. Adding a name does not change what repeaters allow.</p>
+   <div class="actions"><input id="routing-region-add" placeholder="#RegionName" maxlength="31" aria-label="New region code"><button type="button" class="button secondary" id="routing-region-button">Add code</button></div>
+   <div id="routing-region-list" class="routing-tags"></div>
+  </article>
+  <article class="panel"><h2>Channel-specific scopes</h2><p class="hint">Inherit the default, force unscoped, or use a region for channels 0–7. A temporary scope is restored after each channel transmit. A default must be configured first.</p>
+   <div id="routing-channel-list" class="routing-channels"></div>
+  </article>
+ </div>
+ <article class="panel"><h2>Apply changes</h2><p class="hint">Changes are queued to the collector, which exclusively controls the USB radio. Path hash is read back after writing; scope acceptance is verified but cannot be read back independently.</p>
+  <label>Type APPLY ROUTING to confirm<input id="routing-confirm" autocomplete="off" placeholder="APPLY ROUTING"></label>
+  <button class="button primary" id="routing-save" type="button">Apply routing changes</button>
+  <pre id="routing-result" class="text-block" aria-live="polite">No changes submitted.</pre>
+ </article>
+</section>
 <section id="view-alerts" class="view" hidden><article class="panel"><div class="panel-head"><h2>Collector and station alerts</h2></div><div id="all-alerts" class="stream"></div></article></section>
 <section id="view-events" class="view" hidden><article class="panel"><div class="panel-head"><h2>Radio event log</h2></div><div id="event-list" class="stream tall"></div></article></section>
 <section id="view-digest" class="view" hidden>
@@ -162,4 +191,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=5"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=6"></script></body></html>

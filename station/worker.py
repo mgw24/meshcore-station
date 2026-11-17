@@ -8,6 +8,7 @@ from email.message import EmailMessage
 from datetime import timedelta
 from sqlalchemy import select
 from station.config import RADIO_DEVICE, RADIO_POWER_SOURCE
+from station.routing import normalize_scope
 from station.geo import contact_role
 from station.secure import unseal_key
 from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command, AddressEntry, RxActivity,
@@ -71,6 +72,7 @@ class Collector:
         self.local_name = 'Local node'
         self.previous_packet_stats = None
         self.rx_log_last_cleanup = None
+        self.active_scope = None  # None means unknown until explicitly applied
 
     async def handle(self, kind, event):
         data = jsonsafe(getattr(event, 'payload', {}))
@@ -140,6 +142,23 @@ class Collector:
                     if k in own} | {'name': self.local_name})
         except Exception as exc:
             log.warning('Unable to read local radio name: %s', exc)
+        # Observe the actual path-hash mode, if this SDK/firmware supports it.
+        try:
+            await self.read_hash_mode()
+        except Exception as exc:
+            log.warning('Path-hash read unavailable: %s', exc)
+        # Reapply ONLY an explicitly saved Station scope after reconnect.
+        with Session() as db:
+            cfg = db.get(StationStatus, 'routing_policy')
+            policy = dict(cfg.value or {}) if cfg else {}
+        if policy.get('scope_configured'):
+            try:
+                await self.apply_scope(policy['default_scope'])
+            except Exception as exc:
+                log.warning('Saved flood scope could not be restored: %s', exc)
+                record_event('routing_scope_restore_failed', {'error': str(exc)[:160]})
+        else:
+            self.active_scope = None
         await self.mesh.start_auto_message_fetching()
         status_set('radio', {'connected': True, 'mode': 'serial', 'device': RADIO_DEVICE})
         with Session.begin() as db:
@@ -262,6 +281,36 @@ class Collector:
                     db.execute(delete(RxActivity).where(RxActivity.id < cutoff))
             self.rx_log_last_cleanup = utcnow()
 
+    async def read_hash_mode(self):
+        from meshcore import EventType
+        if not hasattr(self.mesh.commands, 'get_path_hash_mode'):
+            raise RuntimeError('Installed MeshCore SDK lacks get_path_hash_mode')
+        response = await asyncio.wait_for(self.mesh.commands.get_path_hash_mode(), timeout=12)
+        if hasattr(response, 'type'):
+            if response.type == EventType.ERROR:
+                raise RuntimeError('Firmware rejected path-hash query')
+            data = response.payload
+        else:
+            data = response
+        if isinstance(data, dict):
+            data = next((data[k] for k in ('mode', 'path_hash_mode', 'value') if k in data), None)
+        mode = int(data)
+        if mode not in (0, 1, 2):
+            raise RuntimeError('Unexpected path-hash mode from radio')
+        status_set('routing_observed', {'path_hash_bytes': mode + 1})
+        return mode + 1
+
+    async def apply_scope(self, scope):
+        from meshcore import EventType
+        if not hasattr(self.mesh.commands, 'set_flood_scope'):
+            raise RuntimeError('Installed MeshCore SDK lacks set_flood_scope')
+        clean = normalize_scope(scope)
+        result = await asyncio.wait_for(self.mesh.commands.set_flood_scope(clean), timeout=12)
+        if result is None or getattr(result, 'type', None) == EventType.ERROR:
+            raise RuntimeError('Radio did not accept flood scope')
+        self.active_scope = clean
+        return clean
+
     async def execute(self, cmd):
         args = cmd.args or {}
         if cmd.kind == 'contacts': return await self.refresh_contacts()
@@ -284,7 +333,31 @@ class Collector:
             else:
                 if not dest.isdecimal() or not 0 <= int(dest) <= 7:
                     raise ValueError('Invalid channel index 0-7')
-                result = await self.mesh.commands.send_chan_msg(int(dest), body)
+                with Session() as db:
+                    row = db.get(StationStatus, 'routing_policy')
+                    route = dict(row.value or {}) if row else {}
+                overrides = route.get('channel_scopes') or {}
+                override = overrides.get(dest)
+                if override is not None:
+                    if not route.get('scope_configured'):
+                        raise RuntimeError('Channel scope override requires configured default scope')
+                    if self.active_scope is None:
+                        raise RuntimeError('Default flood scope has not been applied to the radio')
+                    baseline = self.active_scope
+                    try:
+                        if override != baseline:
+                            await self.apply_scope(override)
+                        result = await self.mesh.commands.send_chan_msg(int(dest), body)
+                    finally:
+                        if self.active_scope != baseline:
+                            try:
+                                await self.apply_scope(baseline)
+                            except Exception:
+                                log.exception('CRITICAL: could not restore flood scope after channel TX')
+                                record_event('routing_scope_restore_failed', {'channel': dest})
+                                raise
+                else:
+                    result = await self.mesh.commands.send_chan_msg(int(dest), body)
             from meshcore import EventType
             if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
             data = jsonsafe(result.payload)
@@ -294,6 +367,40 @@ class Collector:
                                meta=data if isinstance(data, dict) else {'response': data}))
             record_event('outgoing_command_accepted', {'kind': kind, 'destination': dest})
             return {'accepted': True, 'radio_response': data}
+        if cmd.kind == 'read_routing':
+            return {'path_hash_bytes': await self.read_hash_mode(),
+                    'scope': 'Not readable from SDK; use Station-managed policy'}
+        if cmd.kind == 'configure_routing':
+            from meshcore import EventType
+            path_bytes = args.get('path_hash_bytes')
+            if path_bytes is not None:
+                response = await asyncio.wait_for(self.mesh.commands.set_path_hash_mode(int(path_bytes) - 1), timeout=12)
+                if response is None or getattr(response, 'type', None) == EventType.ERROR:
+                    raise RuntimeError('Radio rejected path hash setting')
+                actual = await self.read_hash_mode()
+                if actual != path_bytes:
+                    raise RuntimeError(f'Path hash readback {actual} bytes differs from requested {path_bytes}')
+            apply_default = bool(args.get('apply_scope'))
+            with Session() as db:
+                row = db.get(StationStatus, 'routing_policy')
+                old = dict(row.value or {}) if row else {}
+            if apply_default:
+                await self.apply_scope(args['default_scope'])
+            new_policy = {
+                'catalog': args['catalog'],
+                'channel_scopes': args['channel_scopes'],
+                'default_scope': args['default_scope'] if apply_default else old.get('default_scope', ''),
+                'scope_configured': apply_default or old.get('scope_configured', False),
+            }
+            status_set('routing_policy', new_policy)
+            record_event('routing_configured', {
+                'path_hash_bytes': path_bytes,
+                'default_scope': new_policy['default_scope'] if apply_default else 'unchanged',
+                'channel_override_count': len(new_policy['channel_scopes']),
+            })
+            return {'accepted': True, 'path_hash_bytes': path_bytes,
+                    'scope_applied': apply_default, 'scope_verified': False,
+                    'channel_override_count': len(new_policy['channel_scopes'])}
         if cmd.kind == 'read_radio':
             from meshcore import EventType
             info = await self.mesh.commands.send_appstart()

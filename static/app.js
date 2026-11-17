@@ -1,6 +1,6 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
-const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], status:null};
+const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], routing:null, routingCatalog:null, status:null};
 const H = (v) => String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dt = (v) => v ? new Date(v).toLocaleString() : '—';
 const short = (v,n=18) => String(v||'').length>n ? String(v).slice(0,n)+'…' : String(v||'');
@@ -17,7 +17,7 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book',digest:'Email Digests'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
@@ -301,3 +301,63 @@ $('digest-now-btn').addEventListener('click',async()=>{
   catch(e){toast(e.message,true)}
 });
 setInterval(()=>{if(S.csrf&&S.page==='digest')refreshDigestHistory()},15000);
+
+// v6 Companion routing — code list editing remains local until Apply is pressed.
+let routingCatalog=[];
+function routeOpt(value, label, current){return `<option value="${H(value)}" ${current===value?'selected':''}>${H(label)}</option>`}
+function renderRouting(){
+ const r=S.routing||{};
+ const names=routingCatalog;
+ $('routing-current-hash').textContent=r.path_hash_bytes?`Last read: ${r.path_hash_bytes} byte(s) per hop${r.path_hash_checked_at?' · '+dt(r.path_hash_checked_at):''}`:'Hardware mode has not been read yet';
+ $('routing-scope-current').textContent=r.scope_configured?`Station-managed default: ${r.default_scope||'Unscoped'} (not independently read back from radio)`:'No Station-managed default; current firmware scope is unknown';
+ const choices=names.map(name=>routeOpt(name,name,r.default_scope||'')).join('');
+ $('routing-default').innerHTML=routeOpt('','Unscoped — no region restriction',r.default_scope||'')+choices;
+ $('routing-region-list').innerHTML=names.length?names.map(name=>`<span class="routing-chip">${H(name)} <button type="button" data-remove-region="${H(name)}" aria-label="Remove ${H(name)}">×</button></span>`).join(''):empty('No saved region codes');
+ const saved=r.channel_scopes||{};
+ $('routing-channel-list').innerHTML=Array.from({length:8},(_,idx)=>{
+   const key=String(idx), selected=Object.hasOwn(saved,key)?saved[key]:'inherit';
+   const displayName=(S.channels?.slots||[]).find(c=>Number(c.index)===idx)?.name||`Channel ${idx}`;
+   return `<label class="routing-channel"><span>${H(displayName)} · #${idx}</span><select data-route-channel="${idx}">${routeOpt('inherit','Inherit default',selected)}${routeOpt('','Force unscoped',selected)}${names.map(n=>routeOpt(n,n,selected)).join('')}</select></label>`;
+ }).join('');
+}
+async function refreshRouting(){S.routing=await request('/api/routing');routingCatalog=[...(S.routing.catalog||[])];renderRouting()}
+$('routing-region-button').addEventListener('click',()=>{
+ const value=$('routing-region-add').value.trim();
+ if(!/^#[A-Za-z0-9][A-Za-z0-9_.-]{0,29}$/.test(value)){toast('Use a region like #Spokane (ASCII, up to 30 characters after #)',true);return}
+ if(routingCatalog.includes(value)){toast('That region is already saved',true);return}
+ if(routingCatalog.length>=32){toast('Maximum 32 saved region codes',true);return}
+ const selectedDefault=$('routing-default').value;
+ const previous=Object.fromEntries([...document.querySelectorAll('[data-route-channel]')].map(x=>[x.dataset.routeChannel,x.value]));
+ routingCatalog.push(value);renderRouting();$('routing-default').value=selectedDefault;
+ for(const [key,val] of Object.entries(previous)){document.querySelector(`[data-route-channel="${key}"]`).value=val}
+ $('routing-region-add').value='';
+});
+$('routing-region-list').addEventListener('click',e=>{
+ const n=e.target.dataset.removeRegion;if(!n)return;
+ if(!confirm(`Remove ${n} from the local list? Any matching overrides will be reset.`))return;
+ routingCatalog=routingCatalog.filter(x=>x!==n);
+ renderRouting();
+});
+$('routing-read').addEventListener('click',async()=>{
+ try{const x=await request('/api/routing/read',{method:'POST'});await pollCommand(x.id);await refreshRouting();toast('Read hardware path-hash mode')}
+ catch(e){toast(e.message,true)}
+});
+$('routing-save').addEventListener('click',async()=>{
+ const selected=$('routing-hash').value,applyScope=$('routing-apply-default').checked;
+ const overrides=Object.fromEntries([...document.querySelectorAll('[data-route-channel]')].filter(x=>x.value!=='inherit').map(x=>[x.dataset.routeChannel,x.value]));
+ const body={confirm:$('routing-confirm').value,catalog:routingCatalog,channel_scopes:overrides,apply_scope:applyScope};
+ if(selected)body.path_hash_bytes=Number(selected);
+ if(applyScope)body.default_scope=$('routing-default').value;
+ if(body.confirm!=='APPLY ROUTING'){toast('Type APPLY ROUTING to confirm',true);return}
+ if(!confirm('Apply routing to the live T114? Region scope can restrict which repeaters forward your messages.'))return;
+ try{
+  const x=await request('/api/routing',{method:'PUT',body:JSON.stringify(body)});
+  const result=await pollCommand(x.id);
+  $('routing-result').textContent=JSON.stringify(result,null,2);
+  $('routing-confirm').value='';$('routing-hash').value='';$('routing-apply-default').checked=false;
+  await refreshRouting();toast('Routing update accepted');
+ }catch(e){toast(e.message,true)}
+});
+// Render after sign-in and on Routing navigation; do not touch the serial interface.
+const oldNavigate=navigate;
+navigate=function(view){oldNavigate(view);if(view==='routing')refreshRouting().catch(e=>toast(e.message,true))};

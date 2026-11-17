@@ -1,8 +1,12 @@
-# MeshCore Station — v5
+# MeshCore Station v6 — Routing & Regions
+
+See [V6-RELEASE-NOTES.md](V6-RELEASE-NOTES.md) for the incremental routing update.
+
+# MeshCore Station — Production Edition v5
 
 GitHub source: **https://github.com/mgw24/meshcore-station**
 
-Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 LTS Minimal on VMware vSphere / ESXi**. The T114 is permanently attached to the ESXi host with USB passthrough. 
+Self-hosted **Heltec T114 V2 USB Companion** console for **Ubuntu Server 24.04 LTS Minimal on VMware vSphere / ESXi**. The T114 is permanently attached to the ESXi host with USB passthrough. Access is provided over the existing VPN; no Tailscale component is included.
 
 ## v5: Scheduled email digests + Grafana operations refresh
 

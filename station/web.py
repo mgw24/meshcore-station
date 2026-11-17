@@ -458,6 +458,71 @@ def radio_settings(body: RadioSettings, session=Depends(require_csrf)):
         db.add(cmd); db.flush()
         return {'id': cmd.id, 'state': cmd.state}
 
+# Companion routing controls: no repeater region ACL commands are issued here.
+# The SDK exposes a read command for path hashes, but not a reliable readback
+# for the companion flood scope. Never present a locally saved scope as verified.
+from station.routing import validate_region, validate_catalog, normalize_scope, normalize_channel_scopes
+
+class RoutingSettings(BaseModel):
+    path_hash_bytes: Literal[1, 2, 3] | None = None
+    default_scope: str | None = None
+    apply_scope: bool = False
+    channel_scopes: dict[str, str] | None = None
+    catalog: list[str] | None = None
+    confirm: str
+
+@app.get('/api/routing')
+def routing_get(session=Depends(user_session)):
+    with Session() as db:
+        row = db.get(StationStatus, 'routing_policy')
+        local = dict(row.value or {}) if row else {}
+        observed = db.get(StationStatus, 'routing_observed')
+    return {'catalog': local.get('catalog', []),
+            'default_scope': local.get('default_scope') if local.get('scope_configured') else None,
+            'scope_configured': bool(local.get('scope_configured')),
+            'scope_verified': False,
+            'channel_scopes': local.get('channel_scopes', {}),
+            'path_hash_bytes': (observed.value or {}).get('path_hash_bytes') if observed else None,
+            'path_hash_checked_at': observed.updated.isoformat() if observed else None,
+            'note': 'Scope is managed by Station, not read back from firmware. No region restrictions are applied unless explicitly saved.'}
+
+@app.post('/api/routing/read')
+def routing_read(session=Depends(require_csrf)):
+    with Session.begin() as db:
+        cmd = Command(kind='read_routing', args={}, state='pending')
+        db.add(cmd); db.flush()
+        return {'id': cmd.id, 'state': 'pending'}
+
+@app.put('/api/routing')
+def routing_update(body: RoutingSettings, session=Depends(require_csrf)):
+    if body.confirm != 'APPLY ROUTING':
+        raise HTTPException(422, 'Type APPLY ROUTING to confirm')
+    if body.path_hash_bytes is None and not body.apply_scope and body.channel_scopes is None and body.catalog is None:
+        raise HTTPException(422, 'No routing changes provided')
+    with Session() as db:
+        row = db.get(StationStatus, 'routing_policy')
+        current = dict(row.value or {}) if row else {}
+    try:
+        catalog = validate_catalog(body.catalog) if body.catalog is not None else current.get('catalog', [])
+        scope = normalize_scope(body.default_scope) if body.apply_scope else current.get('default_scope', '')
+        overrides = (normalize_channel_scopes(body.channel_scopes) if body.channel_scopes is not None
+                     else current.get('channel_scopes', {}))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if overrides and not (body.apply_scope or current.get('scope_configured')):
+        raise HTTPException(422, 'Apply a default scope (Unscoped is valid) before channel overrides')
+    # Persist only once the radio has accepted the requested hardware settings.
+    with Session.begin() as db:
+        cmd = Command(kind='configure_routing', args={
+            'path_hash_bytes': body.path_hash_bytes,
+            'apply_scope': body.apply_scope,
+            'default_scope': scope,
+            'catalog': catalog,
+            'channel_scopes': overrides,
+        }, state='pending')
+        db.add(cmd); db.flush()
+        return {'id': cmd.id, 'state': 'pending'}
+
 # Public API never returns keys, including channel secrets. They live temporarily in
 # the command queue and are scrubbed by the collector after processing.
 class ChannelUpdate(BaseModel):
