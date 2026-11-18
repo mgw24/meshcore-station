@@ -9,10 +9,12 @@ from datetime import timedelta
 from sqlalchemy import select
 from station.config import RADIO_DEVICE, RADIO_POWER_SOURCE
 from station.routing import normalize_scope
+from station.tx_tracking import expected_ack, received_ack, match_channel_echo
 from station.geo import contact_role
+from station.node_adverts import advertise_wait, coords_ok
 from station.secure import unseal_key
 from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command, AddressEntry, RxActivity,
-                        RadioEvent, StationStatus, status_set, record_event, utcnow)
+                        RadioEvent, TxEvidence, StationStatus, status_set, record_event, utcnow)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('station.worker')
@@ -93,17 +95,47 @@ class Collector:
                                target=str(data.get('channel_idx', '0')),
                                sender=str(data.get('pubkey_prefix', 'channel')),
                                body=str(data.get('text', '')), meta=data))
+            # A channel echo can be recognized only if the incoming packet
+            # includes original sender timestamp, channel, exact text, and a hop.
+            # Missing evidence leaves the outbound message unconfirmed.
+            with Session.begin() as db:
+                recent = db.scalars(select(Message).where(
+                    Message.direction == 'out', Message.kind == 'channel',
+                    Message.ts >= utcnow() - timedelta(minutes=10)
+                ).order_by(Message.id.desc()).limit(100)).all()
+                matches = [row for row in recent if match_channel_echo(
+                    data, channel=row.target, body=row.body, send_ts=row.ts)]
+                if len(matches) == 1:
+                    row = matches[0]
+                    prior = db.scalars(select(TxEvidence).where(
+                        TxEvidence.message_id == row.id,
+                        TxEvidence.kind == 'channel_echo').limit(1)).first()
+                    if prior is None:
+                        db.add(TxEvidence(message_id=row.id, kind='channel_echo',
+                                          detail={'path_len': int(data['path_len']),
+                                                  'source': 'matching_decoded_channel_event'}))
+                elif len(matches) > 1:
+                    log.info('Ambiguous channel echo; no TX evidence recorded')
         elif kind == 'ack':
-            code = str(data.get('code', '')).lower() if isinstance(data, dict) else ''
+            code = received_ack(data)
             if code:
+                # Correlate only a direct-message expected ACK checksum and only
+                # within a bounded time window. Never interpret channel ACKs as delivery.
                 with Session.begin() as db:
-                    rows = db.scalars(select(Message).where(
-                        Message.direction == 'out', Message.status == 'sent_unconfirmed'
+                    recent = db.scalars(select(Message).where(
+                        Message.direction == 'out', Message.kind == 'direct',
+                        Message.status == 'sent_unconfirmed',
+                        Message.ts >= utcnow() - timedelta(minutes=30)
                     ).order_by(Message.id.desc()).limit(100)).all()
-                    for row in rows:
-                        if str((row.meta or {}).get('expected_ack', '')).lower() == code:
-                            row.status = 'acknowledged'
-                            break
+                    matches = [row for row in recent
+                               if expected_ack(row.meta or {}) == code]
+                    if len(matches) == 1:
+                        row = matches[0]
+                        row.status = 'acknowledged'
+                        db.add(TxEvidence(message_id=row.id, kind='direct_ack',
+                                          detail={'ack_match': True}))
+                    elif len(matches) > 1:
+                        log.warning('Ambiguous direct ACK; no message status changed')
         elif kind in ('advert', 'new_contact'):
             safe = {k: v for k, v in data.items() if not any(t in k.lower() for t in ('secret', 'private_key', 'password'))} if isinstance(data, dict) else {}
             record_event(kind, safe)
@@ -138,10 +170,18 @@ class Collector:
                 own = jsonsafe(self_info.payload)
                 self.local_name = str(own.get('name') or own.get('adv_name') or 'Local node')[:100]
                 status_set('radio_config', {k: own[k] for k in
-                    ('name', 'radio_freq', 'radio_bw', 'radio_sf', 'radio_cr', 'tx_power')
+                    ('name', 'radio_freq', 'radio_bw', 'radio_sf', 'radio_cr', 'tx_power', 'adv_lat', 'adv_lon', 'adv_loc_policy')
                     if k in own} | {'name': self.local_name})
         except Exception as exc:
             log.warning('Unable to read local radio name: %s', exc)
+        # Report only radio fields actually supplied by firmware; unknown policy is NOT 'off'.
+        try:
+            observed = jsonsafe(self_info.payload) if isinstance(self_info.payload, dict) else {}
+            fields = {k: observed[k] for k in ('adv_lat', 'adv_lon', 'adv_loc_policy', 'advert_loc_policy') if k in observed}
+            status_set('radio_location_observed', {'readback': fields, 'policy_verified': bool('adv_loc_policy' in fields or 'advert_loc_policy' in fields),
+                                                    'source': 'send_appstart'})
+        except Exception as exc:
+            log.warning('Radio location readback unavailable: %s', exc)
         # Observe the actual path-hash mode, if this SDK/firmware supports it.
         try:
             await self.read_hash_mode()
@@ -316,9 +356,47 @@ class Collector:
         if cmd.kind == 'contacts': return await self.refresh_contacts()
         if cmd.kind == 'advert':
             from meshcore import EventType
-            result = await self.mesh.commands.send_advert(flood=bool(args.get('flood', False)))
-            if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
-            return {'accepted': True}
+            flood = bool(args.get('flood', False))
+            with Session() as db:
+                last = db.get(StationStatus, 'advert_last_sent')
+                stored = dict(last.value or {}) if last else {}
+            wait = advertise_wait(stored, flood, utcnow())
+            if wait: raise RuntimeError(f'Advertisement cooldown: {wait} seconds remaining')
+            result = await asyncio.wait_for(self.mesh.commands.send_advert(flood=flood), timeout=15)
+            if result is None or result.type == EventType.ERROR: raise RuntimeError('Radio rejected advertisement')
+            mode = 'flood' if flood else 'local'
+            stored[mode] = utcnow().isoformat()
+            status_set('advert_last_sent', stored)
+            record_event('outgoing_advert_accepted', {'mode': mode, 'command_accepted': True})
+            return {'accepted': True, 'mode': mode, 'delivery_confirmed': False}
+        if cmd.kind == 'node_location':
+            from meshcore import EventType
+            mode = args.get('mode')
+            if mode not in ('share', 'private', 'hide'): raise ValueError('Invalid location mode')
+            if mode == 'hide':
+                r = await asyncio.wait_for(self.mesh.commands.set_advert_loc_policy(0), timeout=12)
+                if r is None or r.type == EventType.ERROR: raise RuntimeError('Radio rejected location sharing disable')
+            else:
+                lat, lon = args.get('latitude'), args.get('longitude')
+                if not coords_ok(lat, lon): raise ValueError('Invalid coordinates')
+                # Privacy-first: disable sharing BEFORE writing coordinates for private mode.
+                if mode == 'private':
+                    r = await asyncio.wait_for(self.mesh.commands.set_advert_loc_policy(0), timeout=12)
+                    if r is None or r.type == EventType.ERROR: raise RuntimeError('Radio rejected private location policy')
+                r = await asyncio.wait_for(self.mesh.commands.set_coords(float(lat), float(lon)), timeout=12)
+                if r is None or r.type == EventType.ERROR: raise RuntimeError('Radio rejected coordinates')
+                if mode == 'share':
+                    r = await asyncio.wait_for(self.mesh.commands.set_advert_loc_policy(1), timeout=12)
+                    if r is None or r.type == EventType.ERROR: raise RuntimeError('Coordinates saved, but radio rejected location sharing')
+            info = await asyncio.wait_for(self.mesh.commands.send_appstart(), timeout=12)
+            payload = jsonsafe(info.payload) if info is not None and info.type != EventType.ERROR and isinstance(info.payload, dict) else {}
+            fields = {k: payload[k] for k in ('adv_lat','adv_lon','adv_loc_policy','advert_loc_policy') if k in payload}
+            verified = ('adv_loc_policy' in fields or 'advert_loc_policy' in fields)
+            status_set('radio_location_observed', {'readback':fields, 'policy_verified':verified,
+                'last_write_mode':mode, 'write_accepted_at':utcnow().isoformat(), 'source':'post-write appstart'})
+            record_event('node_location_command_accepted', {'mode':mode, 'policy_readback_available':verified})
+            return {'accepted': True, 'mode':mode, 'policy_readback_available':verified,
+                    'note':'Readback is not available on all firmware. Saving radio coordinates does not send an advertisement.'}
         if cmd.kind == 'send':
             kind = args.get('kind')
             dest = str(args.get('destination', ''))
@@ -361,10 +439,18 @@ class Collector:
             from meshcore import EventType
             if result.type == EventType.ERROR: raise RuntimeError(str(result.payload))
             data = jsonsafe(result.payload)
+            response = data if isinstance(data, dict) else {'response': data}
+            # Store only ACK checksum metadata required for exact correlation.
+            # A radio-accepted channel message remains delivery-unconfirmed.
+            safe_response = {k: v for k, v in response.items()
+                             if k not in ('private_key', 'secret', 'password')}
             with Session.begin() as db:
-                db.add(Message(direction='out', kind=kind, target=dest, sender=self.local_name, body=body,
-                               status='sent_unconfirmed',
-                               meta=data if isinstance(data, dict) else {'response': data}))
+                msg = Message(direction='out', kind=kind, target=dest, sender=self.local_name, body=body,
+                              status='sent_unconfirmed', meta=safe_response)
+                db.add(msg)
+                db.flush()
+                db.add(TxEvidence(message_id=msg.id, kind='radio_accepted',
+                                  detail={'kind': kind, 'ack_expected': bool(expected_ack(response)) if kind == 'direct' else False}))
             record_event('outgoing_command_accepted', {'kind': kind, 'destination': dest})
             return {'accepted': True, 'radio_response': data}
         if cmd.kind == 'read_routing':
@@ -476,6 +562,8 @@ class Collector:
             result = await asyncio.wait_for(self.execute(cmd), timeout=45)
         except Exception as exc:
             log.exception('Command %s failed', ident)
+            if cmd.kind == 'advert':
+                record_event('outgoing_advert_failed', {'mode':'flood' if (cmd.args or {}).get('flood') else 'local'})
             with Session.begin() as db:
                 row = db.get(Command, ident)
                 row.state, row.error, row.finished = 'failed', ('Channel update failed; check collector logs' if cmd.kind in ('set_channel','delete_channel') else str(exc)[:1000]), utcnow()

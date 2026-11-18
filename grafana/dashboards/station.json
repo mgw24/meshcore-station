@@ -1,6 +1,6 @@
 {
   "uid": "meshcore-station",
-  "title": "MeshCore Station · Radio Operations",
+  "title": "MeshCore Station \u00b7 Radio Operations",
   "tags": [
     "meshcore",
     "t114",
@@ -10,7 +10,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "refresh": "30s",
   "time": {
     "from": "now-24h",
@@ -99,7 +99,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "RX PACKETS · BOOT",
+      "title": "RX PACKETS \u00b7 BOOT",
       "description": "Cumulative successfully received RF packets since T114 boot; may reset on power cycle.",
       "gridPos": {
         "x": 4,
@@ -150,7 +150,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "TX PACKETS · BOOT",
+      "title": "TX PACKETS \u00b7 BOOT",
       "description": "Cumulative transmitted packets reported by T114, not confirmations of remote reception.",
       "gridPos": {
         "x": 8,
@@ -382,7 +382,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "RX traffic & receive errors · packets / interval",
+      "title": "RX traffic & receive errors \u00b7 packets / interval",
       "description": "Each bar is the number of changes within the displayed interval; resets and missing samples are excluded.",
       "gridPos": {
         "x": 0,
@@ -484,7 +484,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Receive errors · percentage of attempts",
+      "title": "Receive errors \u00b7 percentage of attempts",
       "description": "CRC/receive errors divided by successful packets plus errors for each bucket; zero traffic is shown as no data.",
       "gridPos": {
         "x": 16,
@@ -555,7 +555,7 @@
     {
       "id": 10,
       "type": "piechart",
-      "title": "RF receive composition · since boot",
+      "title": "RF receive composition \u00b7 since boot",
       "description": "Last reported cumulative radio breakdown; counts are not individual decoded chat messages.",
       "gridPos": {
         "x": 0,
@@ -648,7 +648,7 @@
     {
       "id": 11,
       "type": "piechart",
-      "title": "RF transmit composition · since boot",
+      "title": "RF transmit composition \u00b7 since boot",
       "description": "Flood TX includes Public channel broadcasts. A radio TX counter increase is not proof another node heard it.",
       "gridPos": {
         "x": 12,
@@ -754,7 +754,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Signal environment · noise floor, RSSI and SNR",
+      "title": "Signal environment \u00b7 noise floor & RSSI (dBm)",
       "description": "RSSI and SNR are the last reported measurements (not an always-current packet). SNR uses the right-hand dB axis when available.",
       "gridPos": {
         "x": 0,
@@ -771,7 +771,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, noise_floor::double precision AS \"Noise floor\", rssi::double precision AS \"Last RSSI\", snr::double precision AS \"Last SNR\" FROM samples WHERE $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT ts AS time, noise_floor::double precision AS \"Noise floor\", rssi::double precision AS \"Last RSSI\" FROM samples WHERE $__timeFilter(ts) ORDER BY ts"
         }
       ],
       "fieldConfig": {
@@ -997,7 +997,7 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "RX paths · flood and direct (per interval)",
+      "title": "RX paths \u00b7 flood and direct (per interval)",
       "description": "Reset-aware packet counts per interval from the radio; flood packets can contain non-message traffic.",
       "gridPos": {
         "x": 0,
@@ -1099,7 +1099,7 @@
     {
       "id": 17,
       "type": "timeseries",
-      "title": "TX paths · flood and direct (per interval)",
+      "title": "TX paths \u00b7 flood and direct (per interval)",
       "description": "Public-channel test sends should normally increment Flood TX; this does not demonstrate successful reception.",
       "gridPos": {
         "x": 12,
@@ -1214,7 +1214,7 @@
     {
       "id": 19,
       "type": "timeseries",
-      "title": "Message activity · received vs sent",
+      "title": "Message activity \u00b7 received vs sent",
       "description": "Only real messages. Outgoing messages represent radio-accepted submissions, not confirmed remote delivery.",
       "gridPos": {
         "x": 0,
@@ -1372,7 +1372,7 @@
     {
       "id": 21,
       "type": "table",
-      "title": "Recent real messages · latest 20",
+      "title": "Recent real messages \u00b7 latest 20",
       "description": "Messages stored in PostgreSQL. Radio-accepted outgoing messages are not delivery receipts.",
       "gridPos": {
         "x": 0,
@@ -1422,7 +1422,7 @@
     {
       "id": 22,
       "type": "piechart",
-      "title": "Message outcomes · all time",
+      "title": "Message outcomes \u00b7 all time",
       "description": "All-time real message record states; Channel sent means accepted by radio, not received remotely.",
       "gridPos": {
         "x": 16,
@@ -1573,7 +1573,7 @@
     {
       "id": 24,
       "type": "barchart",
-      "title": "Known nodes · by role",
+      "title": "Known nodes \u00b7 by role",
       "description": "Saved radio-discovered contacts only. This is not a count of RF packets.",
       "gridPos": {
         "x": 0,
@@ -1679,23 +1679,23 @@
                     "type": "value",
                     "options": {
                       "Companion": {
-                        "text": "● Companion",
+                        "text": "\u25cf Companion",
                         "color": "#6BAFFF"
                       },
                       "Repeater": {
-                        "text": "◆ Repeater",
+                        "text": "\u25c6 Repeater",
                         "color": "#F5B663"
                       },
                       "Room server": {
-                        "text": "■ Room server",
+                        "text": "\u25a0 Room server",
                         "color": "#AA91F7"
                       },
                       "Sensor": {
-                        "text": "▲ Sensor",
+                        "text": "\u25b2 Sensor",
                         "color": "#30D7C7"
                       },
                       "Unknown": {
-                        "text": "○ Unknown",
+                        "text": "\u25cb Unknown",
                         "color": "#94A8C0"
                       }
                     }
@@ -1724,7 +1724,7 @@
     {
       "id": 26,
       "type": "table",
-      "title": "Latest RX activity · decoded events vs counters",
+      "title": "Latest RX activity \u00b7 decoded events vs counters",
       "description": "Counter intervals are aggregate radio statistics, not individual frames. Identified events appear only when the firmware/SDK exposes them.",
       "gridPos": {
         "x": 0,
@@ -1741,7 +1741,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ts AS \"Time\",\n CASE kind\n WHEN 'channel' THEN 'Channel decoded' WHEN 'direct' THEN 'Direct decoded'\n WHEN 'advert' THEN 'Advertisement' WHEN 'new_contact' THEN 'New contact'\n WHEN 'counter_delta' THEN 'Counter interval' WHEN 'counter_reset' THEN 'Counter reset'\n ELSE kind END AS \"Event\",\n CASE WHEN channel IS NULL THEN '—' ELSE 'Ch #' || channel END AS \"Channel\",\n NULLIF(source,'') AS \"Source\",\n count AS \"RX packets (interval)\",errors AS \"RX errors (interval)\",\n rssi AS \"RSSI\",snr AS \"SNR\"\n FROM rx_activity ORDER BY ts DESC LIMIT 25"
+          "rawSql": "SELECT ts AS \"Time\",\n CASE kind\n WHEN 'channel' THEN 'Channel decoded' WHEN 'direct' THEN 'Direct decoded'\n WHEN 'advert' THEN 'Advertisement' WHEN 'new_contact' THEN 'New contact'\n WHEN 'counter_delta' THEN 'Counter interval' WHEN 'counter_reset' THEN 'Counter reset'\n ELSE kind END AS \"Event\",\n CASE WHEN channel IS NULL THEN '\u2014' ELSE 'Ch #' || channel END AS \"Channel\",\n NULLIF(source,'') AS \"Source\",\n count AS \"RX packets (interval)\",errors AS \"RX errors (interval)\",\n rssi AS \"RSSI\",snr AS \"SNR\"\n FROM rx_activity ORDER BY ts DESC LIMIT 25"
         }
       ],
       "fieldConfig": {
@@ -1769,6 +1769,199 @@
           "show": false
         },
         "sortBy": []
+      }
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "05 / SNR & RADIO RESETS",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Last-packet SNR history \u00b7 dB",
+      "description": "SNR is returned by firmware when available. Blank means no SNR sample; never derived from RSSI minus noise.",
+      "gridPos": {
+        "x": 0,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, snr::double precision AS \"Last SNR\" FROM samples WHERE $__timeFilter(ts) AND snr IS NOT NULL ORDER BY ts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dB",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6BAFFF"
+          },
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 17,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Noise floor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6BAFFF"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last RSSI"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#30D7C7"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last SNR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#AA91F7"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "dB"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "stat",
+      "title": "Radio resets \u00b7 selected time range",
+      "description": "Count of radio uptime decreases. A collector restart alone is not treated as a radio reset.",
+      "gridPos": {
+        "x": 12,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "meshcore-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "meshcore-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH seen AS (\nSELECT ts, COALESCE(NULLIF(stats->'core'->>'uptime_secs','')::double precision, uptime) AS radio_uptime\nFROM samples WHERE $__timeFilter(ts) AND COALESCE((stats->>'simulated')::boolean,false)=false\n), intervals AS (\nSELECT radio_uptime, lag(radio_uptime) OVER (ORDER BY ts) AS previous_uptime FROM seen\n)\nSELECT COALESCE(SUM(CASE WHEN radio_uptime < previous_uptime THEN 1 ELSE 0 END),0)::double precision AS \"Detected resets\" FROM intervals"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#AA91F7"
+          },
+          "decimals": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true
       }
     }
   ],

@@ -198,3 +198,19 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 }
 
 .message-row:not([open]) .message-row-expanded{display:none}
+
+/* 0.8.4 — non-invasive, reset-aware charts and node advertisement controls */
+.trends-kpis{margin:10px 0 20px}.trends-grid{margin:4px 0 18px}
+.trends-grid>div{min-width:0;background:#0c1a24;border:1px solid #29404e;border-radius:12px;padding:14px}
+.trends-grid h3{margin:2px 0 9px;font-size:.94rem}
+.trends-grid .chart{min-height:160px}.trends-grid svg{display:block;width:100%;height:auto}
+.trend-legend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:#aec6d2;font-size:.72rem;margin-bottom:4px}
+.trend-legend span{display:inline-flex;gap:5px;align-items:center}.trend-legend i{display:inline-block;width:11px;height:11px;border-radius:3px}
+.trend-legend small{margin-left:auto}.trend-axis{display:flex;justify-content:space-between;gap:10px;font-size:.69rem;color:#8da6b6}
+.radio-reset-list{margin-top:7px;color:var(--muted);font-size:.75rem}.radio-reset{padding:6px;border-left:2px solid #f59d6e;margin:5px 0}
+.node-action-grid{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}.node-action-grid .button{flex:1 1 180px}
+.node-advert-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 20px}
+.advert-card{padding:15px;border:1px solid #31505b;background:#0c1d29;border-radius:12px;display:flex;flex-direction:column;gap:10px}
+.advert-card h3{margin:0}.advert-card p{margin:0;color:var(--muted);font-size:.8rem;flex:1;line-height:1.6}.advert-card small{color:#aec5d1}
+.map-pin.self{background:#42d7bf;color:#05212c;border-color:white;border-radius:12px}.node-tag.self{background:#143e3a;color:#7afbe8}
+@media(max-width:800px){.node-advert-modes{grid-template-columns:1fr}.trends-grid{grid-template-columns:1fr}.node-action-grid .button{flex-basis:100%}}

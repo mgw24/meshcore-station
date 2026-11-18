@@ -24,6 +24,8 @@ from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
 from station.geo import advertised_location, contact_role
 from station.health import packet_detail, delta, seconds_old
 from station.radio_diagnostics import sample_window, evidence_label
+from station.radio_trends import trend
+from station.node_adverts import coords_ok, advertise_wait
 from station.secure import seal_key
 from station.db import (initialize, Session, Contact, NodeLocation, Message, Sample, Alert, AddressEntry, RxActivity, TxEvidence,
                         Command, RadioEvent, StationStatus, utcnow)
@@ -37,7 +39,7 @@ from typing import Literal
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
 
-app = FastAPI(title='MeshCore Station 0.8.3', docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title='MeshCore Station 0.8.4', docs_url=None, redoc_url=None, openapi_url=None)
 BASE = Path(__file__).resolve().parent.parent
 app.mount('/assets', StaticFiles(directory=BASE / 'static'), name='assets')
 signer = URLSafeTimedSerializer(SESSION_SECRET, salt='meshcore-station-auth')
@@ -133,7 +135,7 @@ def status(session=Depends(user_session)):
 
 @app.get('/api/version')
 def version(session=Depends(user_session)):
-    return {'version': '0.8.3', 'release': 'Messages & Release Consistency'}
+    return {'version': '0.8.4', 'release': 'Radio Health, Node Location & Advertisements'}
 
 @app.get('/api/radio/diagnostics')
 def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
@@ -168,7 +170,7 @@ def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
     def val(key):
         row = status_rows.get(key)
         return (row.value or {}) if row else {}
-    return {'version': '0.8.3', 'window_hours': hours,
+    return {'version': '0.8.4', 'window_hours': hours,
             'collector_online': bool(age is not None and age < 35 and reported.get('connected')),
             'heartbeat_age_secs': age, 'traffic': sample_window(samples, now),
             'routing': {'observed': val('routing_observed'),
@@ -407,6 +409,16 @@ def history(hours: int = 24, session=Depends(user_session)):
         return result
 
 
+@app.get('/api/radio/trends')
+def radio_trends(hours: int = 24, session=Depends(user_session)):
+    hours = min(max(hours, 1), 168)
+    with Session() as db:
+        samples = list(db.scalars(select(Sample).where(
+            Sample.ts >= utcnow() - timedelta(hours=hours))
+            .order_by(Sample.ts.desc()).limit(11000)).all())
+    return trend(samples, hours)
+
+
 @app.get('/api/radio/health')
 def radio_health(session=Depends(user_session)):
     now = utcnow()
@@ -443,7 +455,7 @@ class CommandIn(BaseModel):
 
 @app.post('/api/commands')
 def queue_command(body: CommandIn, session=Depends(require_csrf)):
-    if body.kind not in ('send', 'contacts', 'advert'): raise HTTPException(400, 'Unsupported command')
+    if body.kind not in ('send', 'contacts'): raise HTTPException(400, 'Use the dedicated advertisement controls')
     if body.kind == 'send':
         kind, dest = ('channel', body.destination[8:]) if body.destination.startswith('channel:') else ('direct', body.destination)
         if not body.text.strip(): raise HTTPException(422, 'Message required')
@@ -719,6 +731,92 @@ class LocationInput(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
 
+# The local map location is private until the user separately applies radio changes.
+class OwnLocation(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    description: str = Field(default='', max_length=160)
+    elevation_m: float | None = Field(default=None, ge=-500, le=9000)
+
+class OwnLocationApply(BaseModel):
+    mode: Literal['share', 'private', 'hide']
+    confirm: str
+
+class AdvertRequest(BaseModel):
+    flood: bool = False
+    confirm: str
+
+@app.get('/api/node/location')
+def own_location_get(session=Depends(user_session)):
+    with Session() as db:
+        saved = db.get(StationStatus, 'own_location')
+        radio = db.get(StationStatus, 'radio_location_observed')
+        config = db.get(StationStatus, 'radio_config')
+    return {'private': saved.value if saved else None,
+            'radio': radio.value if radio else None,
+            'radio_checked_at': radio.updated.isoformat() if radio else None,
+            'node_name': (config.value or {}).get('name', 'Local node') if config else 'Local node',
+            'note': 'Saving locally does not write to or advertise from the T114. Radio policy readback may be unavailable.'}
+
+@app.put('/api/node/location')
+def own_location_save(body: OwnLocation, session=Depends(require_csrf)):
+    if not coords_ok(body.latitude, body.longitude):
+        raise HTTPException(422, 'Enter valid latitude/longitude, not 0,0')
+    data = {'latitude': body.latitude, 'longitude': body.longitude,
+            'description': body.description.strip(), 'elevation_m': body.elevation_m}
+    with Session.begin() as db:
+        row = db.get(StationStatus, 'own_location')
+        if row: row.value, row.updated = data, utcnow()
+        else: db.add(StationStatus(key='own_location', value=data, updated=utcnow()))
+    return {'saved': True, 'radio_changed': False}
+
+@app.post('/api/node/location/apply')
+def own_location_apply(body: OwnLocationApply, session=Depends(require_csrf)):
+    expected = {'share': 'SHARE LOCATION', 'private': 'APPLY PRIVATE', 'hide': 'HIDE LOCATION'}[body.mode]
+    if body.confirm != expected: raise HTTPException(422, f'Type {expected} to confirm')
+    with Session.begin() as db:
+        row = db.get(StationStatus, 'own_location')
+        saved = dict(row.value or {}) if row else {}
+        if body.mode in ('private','share') and not coords_ok(saved.get('latitude'), saved.get('longitude')):
+            raise HTTPException(422, 'Save your location locally before applying it to the T114')
+        cmd = Command(kind='node_location', args={'mode': body.mode,
+                          'latitude': saved.get('latitude') if body.mode != 'hide' else None,
+                          'longitude': saved.get('longitude') if body.mode != 'hide' else None}, state='pending')
+        db.add(cmd);db.flush()
+        return {'id': cmd.id, 'state': cmd.state}
+
+@app.get('/api/node/adverts')
+def advert_history(session=Depends(user_session)):
+    with Session() as db:
+        last = db.get(StationStatus, 'advert_last_sent')
+        history = list(db.scalars(select(RadioEvent).where(RadioEvent.kind.in_(
+            ['outgoing_advert_accepted','outgoing_advert_failed']))
+            .order_by(RadioEvent.ts.desc()).limit(30)).all())
+        pending = list(db.scalars(select(Command).where(Command.kind == 'advert',
+                Command.state.in_(['pending','running'])).limit(10)).all())
+    stored = last.value if last else {}
+    now = utcnow()
+    return {'last_accepted': stored, 'cooldown_local_secs': advertise_wait(stored, False, now),
+            'cooldown_flood_secs': advertise_wait(stored, True, now),
+            'pending': [{'id': c.id, 'mode': 'flood' if (c.args or {}).get('flood') else 'local'} for c in pending],
+            'events': [{'ts': e.ts.isoformat(), 'kind': e.kind, 'mode': (e.detail or {}).get('mode')} for e in history],
+            'note': 'Accepted only means the radio accepted the command; no other station is confirmed to have heard it.'}
+
+@app.post('/api/node/adverts')
+def advert_send(body: AdvertRequest, session=Depends(require_csrf)):
+    expected = 'FLOOD ADVERT' if body.flood else 'LOCAL ADVERT'
+    if body.confirm != expected: raise HTTPException(422, f'Type {expected} to confirm')
+    with Session.begin() as db:
+        last = db.get(StationStatus, 'advert_last_sent')
+        wait = advertise_wait(last.value if last else {}, body.flood, utcnow())
+        if wait: raise HTTPException(429, f'Advertisement cooldown: {wait} seconds remaining')
+        existing = db.scalars(select(Command).where(Command.kind == 'advert',
+                      Command.state.in_(['pending','running'])).limit(1)).first()
+        if existing: raise HTTPException(409, 'An advertisement is already queued')
+        cmd = Command(kind='advert', args={'flood': body.flood}, state='pending')
+        db.add(cmd); db.flush()
+        return {'id': cmd.id, 'state': cmd.state}
+
 @app.get('/api/map/nodes')
 def map_nodes(session=Depends(user_session)):
     with Session() as db:
@@ -733,6 +831,12 @@ def map_nodes(session=Depends(user_session)):
             nodes.append({'key': c.public_key, 'name': c.name,
                           'role': (contact_role(c.detail or {}) if contact_role(c.detail or {}) != 'unknown' else c.role),
                           'last_seen': c.last_seen.isoformat(), 'location': location})
+        own = db.get(StationStatus, 'own_location')
+        rc = db.get(StationStatus, 'radio_config')
+        if own and isinstance(own.value, dict) and coords_ok(own.value.get('latitude'), own.value.get('longitude')):
+            nodes.append({'key':'self', 'name':(rc.value or {}).get('name','My Station') if rc else 'My Station',
+                          'role':'self', 'last_seen':utcnow().isoformat(),
+                          'location':{'lat':own.value['latitude'],'lon':own.value['longitude'],'source':'private'}})
     return nodes
 
 @app.put('/api/map/nodes/{public_key}/location')

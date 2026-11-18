@@ -17,11 +17,11 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions','my-node':'My Node & Adverts'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
-  return ({repeater:['repeater','↗','Repeater'],client:['client','●','Companion'],room_server:['room_server','▣','Room server'],sensor:['sensor','◆','Sensor']})[roleKey]||['unknown','?','Unknown'];
+  return ({repeater:['repeater','↗','Repeater'],client:['client','●','Companion'],room_server:['room_server','▣','Room server'],sensor:['sensor','◆','Sensor'],self:['self','⌖','My station']})[roleKey]||['unknown','?','Unknown'];
 }
 function nodeTag(role){const [css,icon,label]=nodeStyle(role);return `<span class="node-tag ${css}"><span aria-hidden="true">${icon}</span> ${H(label)}</span>`}
 function messageStatus(v){return ({sent:'Radio accepted · delivery unconfirmed',sent_unconfirmed:'Radio accepted · delivery unconfirmed',acknowledged:'Direct ACK received',simulated:'Simulated'})[v]||String(v||'')}
@@ -91,7 +91,7 @@ $('refresh').addEventListener('click',refresh);
 $('message-text').addEventListener('input',()=>{$('char-count').textContent=$('message-text').value.length+' / 180'});
 $('send-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await enqueue({kind:'send',destination:$('destination').value,text:$('message-text').value});$('message-text').value='';$('char-count').textContent='0 / 180';$('reply-context').hidden=true}catch(err){toast(err.message,true)}finally{b.disabled=false}});
 for(const id of ['sync-contacts','overview-discover'])$(id).addEventListener('click',async()=>{try{await enqueue({kind:'contacts'})}catch(e){toast(e.message,true)}});
-$('advertise').addEventListener('click',async()=>{try{await enqueue({kind:'advert',flood:false})}catch(e){toast(e.message,true)}});
+$('advertise').addEventListener('click',()=>navigate('my-node'));
 $('all-alerts').addEventListener('click',async e=>{let id=e.target.dataset.resolve;if(!id)return;try{await request('/api/alerts/'+id+'/resolve',{method:'POST'});await refresh()}catch(err){toast(err.message,true)}});
 $('firmware-form').addEventListener('submit',async e=>{e.preventDefault();if(!confirm('This will stop the collector and flash the T114. Continue?'))return;let btn=e.submitter;btn.disabled=true;try{const f=new FormData();f.append('file',$('firmware-file').files[0]);f.append('confirmation',$('flash-confirm').value);let job=await request('/api/firmware/upload',{method:'POST',body:f});toast('Firmware job queued: '+job.id);$('firmware-form').reset();await refresh();await showJob(job.id)}catch(err){toast(err.message,true)}finally{btn.disabled=false}});
 async function showJob(id){try{let j=await request('/api/firmware/jobs/'+id);$('firmware-log').textContent=`${j.status}: ${j.message||''}\nSHA256: ${j.sha256||''}\n\n${j.log||'No flashing output yet.'}`}catch(e){toast(e.message,true)}}
@@ -614,3 +614,65 @@ $('all-messages').addEventListener('click',async event=>{
  }
 });
 $('reply-cancel').addEventListener('click',()=>{$('reply-context').hidden=true;});
+
+
+// 0.8.4 — telemetry trends. Everything comes from PostgreSQL, not a second serial connection.
+const TR084={data:null,location:null,adverts:null};
+function trendFmt084(v,digits=1){return typeof v==='number'&&Number.isFinite(v)?v.toFixed(digits):'—'}
+function trendSvg084(id,points,keys,colors,unit){
+ const parent=$(id);if(!parent)return;
+ if(!points.length || !keys.some(k=>points.some(p=>typeof p[k]==='number'))){parent.innerHTML=empty('No measurement available for this interval');return}
+ const w=760,h=212,pad=42,low=14,wide=w-2*pad,tall=h-2*pad;
+ const all=points.flatMap(p=>keys.map(k=>p[k]).filter(v=>typeof v==='number'&&Number.isFinite(v)));
+ let min=Math.min(...all),max=Math.max(...all);if(min===max){min-=1;max+=1}
+ const margin=(max-min)*.10;min-=margin;max+=margin;
+ const px=i=>pad+(points.length<=1?wide/2:wide*i/(points.length-1));
+ const py=v=>h-pad-(v-min)/(max-min)*tall;
+ let grid='';for(let i=0;i<4;i++){const y=low+15+i*49;grid+=`<line x1="${pad}" x2="${w-pad}" y1="${y}" y2="${y}" stroke="#34505b" stroke-dasharray="4 5"/><text x="3" y="${y+4}" fill="#99b4c2" font-size="12">${(max-(y-(h-pad-tall))/tall*(max-min)).toFixed(1)}</text>`;}
+ const lines=keys.map((key,j)=>{let segments=[],run=[];const add=()=>{if(run.length>0){segments.push(run.join(' '));run=[]}};
+  points.forEach((p,i)=>{const v=p[key];if(typeof v!=='number'||p.reset&&key.includes('per_min'))add();else run.push(px(i).toFixed(1)+','+py(v).toFixed(1))});add();
+  return segments.map(segment=>`<polyline points="${segment}" fill="none" stroke="${colors[j]}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`).join('');}).join('');
+ const marks=points.map((p,i)=>p.reset?`<line x1="${px(i)}" x2="${px(i)}" y1="${low}" y2="${h-pad}" stroke="#f59d6e" stroke-dasharray="4 3"/>`:'').join('');
+ const legend=keys.map((k,i)=>`<span><i style="background:${colors[i]}"></i>${H(k.replaceAll('_',' '))}</span>`).join('');
+ parent.innerHTML=`<div class="trend-legend">${legend}<small>${H(unit)}</small></div><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${H(keys.join(' and '))} history">${grid}${lines}${marks}</svg><div class="trend-axis"><span>${H(new Date(points[0].ts).toLocaleString())}</span><span>${H(new Date(points[points.length-1].ts).toLocaleString())}</span></div>`;
+}
+function renderTrends084(){const d=TR084.data;if(!d)return;const p=d.points||[],last=[...p].reverse().find(x=>x.rx_per_min!==null||x.tx_per_min!==null)||{};
+ $('trend-rx').textContent=trendFmt084(last.rx_per_min);$('trend-tx').textContent=trendFmt084(last.tx_per_min);
+ $('trend-resets').textContent=String(d.reset_count??0);$('trend-uptime').textContent=d.latest?.uptime_secs!=null?Math.round(d.latest.uptime_secs).toLocaleString()+' s':'—';
+ trendSvg084('trend-traffic',p,['rx_per_min','tx_per_min'],['#42d7bf','#f0ac52'],'packets/min');
+ trendSvg084('trend-paths',p,['flood_rx_per_min','direct_rx_per_min','flood_tx_per_min','direct_tx_per_min'],['#42d7bf','#75b9e8','#ffb356','#b7a1fc'],'packets/min');
+ trendSvg084('trend-errors',p,['errors_per_min'],['#eb857c'],'errors/min');
+ trendSvg084('trend-rf',p,['rssi_dbm','noise_floor_dbm'],['#75b9e8','#42d7bf'],'dBm');
+ trendSvg084('trend-snr',p,['snr_db'],['#b7a1fc'],'dB');
+ trendSvg084('trend-uptime-chart',p,['uptime_secs'],['#f0ac52'],'seconds');
+ $('trend-reset-list').innerHTML=d.resets?.length?d.resets.slice(-8).reverse().map(x=>`<div class="radio-reset">↻ ${H(dt(x.ts))} · ${H(x.reason)}</div>`).join(''):'No uptime or counter reset detected in this time window.';
+}
+async function refreshTrends084(){if(!S.csrf)return;TR084.data=await request('/api/radio/trends?hours='+Number($('trends-window').value||24));renderTrends084()}
+$('trends-window').addEventListener('change',()=>refreshTrends084().catch(e=>toast(e.message,true)));
+$('trends-reload').addEventListener('click',()=>refreshTrends084().catch(e=>toast(e.message,true)));
+function renderOwn084(){const own=TR084.location,ad=TR084.adverts;if(own){$('own-radio-name').textContent=own.node_name||'My node';
+ const saved=own.private||{},observed=own.radio||{},fields=observed.readback||{};
+ $('own-location-status').innerHTML=[['Private map location',saved.latitude!=null?`${Number(saved.latitude).toFixed(5)}, ${Number(saved.longitude).toFixed(5)}`:'Not saved'],['T114 policy readback',observed.policy_verified?(String(fields.adv_loc_policy??fields.advert_loc_policy)==='1'?'Location included':'Location hidden'):'Unavailable / unknown'],['Last radio action',observed.last_write_mode||'None from this interface']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
+ }
+ if(ad){$('advert-local-cooldown').textContent=ad.cooldown_local_secs?`Cooldown: ${Math.ceil(ad.cooldown_local_secs/60)} min`:'Ready to request';$('advert-flood-cooldown').textContent=ad.cooldown_flood_secs?`Cooldown: ${Math.ceil(ad.cooldown_flood_secs/60)} min`:'Ready to request';
+ $('advert-local').disabled=!!(ad.cooldown_local_secs||ad.pending?.length);$('advert-flood').disabled=!!(ad.cooldown_flood_secs||ad.pending?.length);
+ const entries=[...(ad.pending||[]).map(x=>({ts:null,mode:x.mode,kind:'pending'})),...(ad.events||[])];
+ $('advert-history').innerHTML=entries.length?entries.slice(0,16).map(x=>`<div class="rx-line"><time>${H(dt(x.ts))}</time><b>${H(x.mode||'local')}</b><span>${H(x.kind)}</span></div>`).join(''):empty('No advertisement requests recorded.');}}
+async function refreshOwn084(prefill=false){if(!S.csrf)return;const [loc,ad]=await Promise.all([request('/api/node/location'),request('/api/node/adverts')]);TR084.location=loc;TR084.adverts=ad;
+ if(prefill&&loc.private){$('own-lat').value=loc.private.latitude??'';$('own-lon').value=loc.private.longitude??'';$('own-elevation').value=loc.private.elevation_m??'';$('own-description').value=loc.private.description||'';}renderOwn084();}
+$('own-location-form').addEventListener('submit',async e=>{e.preventDefault();try{await request('/api/node/location',{method:'PUT',body:JSON.stringify({latitude:Number($('own-lat').value),longitude:Number($('own-lon').value),description:$('own-description').value,elevation_m:$('own-elevation').value===''?null:Number($('own-elevation').value)})});toast('Saved privately. Radio was not changed.');await refreshOwn084();await refresh()}catch(err){toast(err.message,true)}});
+async function applyOwn084(mode){const confirmText={share:'SHARE LOCATION',private:'APPLY PRIVATE',hide:'HIDE LOCATION'}[mode];
+ const typed=prompt(`Confirm ${mode} radio action. Type ${confirmText}:`);if(typed!==confirmText)return;
+ try{const x=await request('/api/node/location/apply',{method:'POST',body:JSON.stringify({mode,confirm:typed})});await pollCommand(x.id);toast('T114 accepted location command');await refreshOwn084();await refresh()}catch(e){toast(e.message,true)}}
+$('own-apply-private').addEventListener('click',()=>applyOwn084('private'));
+$('own-share').addEventListener('click',()=>applyOwn084('share'));
+$('own-hide').addEventListener('click',()=>applyOwn084('hide'));
+async function sendAdvert084(flood){const confirmText=flood?'FLOOD ADVERT':'LOCAL ADVERT';const typed=prompt(`Send ${flood?'network-wide flood':'zero-hop local'} advertisement? Type ${confirmText}:`);if(typed!==confirmText)return;
+ try{const x=await request('/api/node/adverts',{method:'POST',body:JSON.stringify({flood,confirm:typed})});toast('Advertisement queued #'+x.id);await pollCommand(x.id);toast('Radio accepted advertisement; delivery unconfirmed');await refreshOwn084()}catch(err){toast(err.message,true)}}
+$('advert-local').addEventListener('click',()=>sendAdvert084(false));$('advert-flood').addEventListener('click',()=>sendAdvert084(true));
+$('advert-refresh').addEventListener('click',()=>refreshOwn084().catch(e=>toast(e.message,true)));
+// Lazy-refresh only the visible page. Preserve form edits during periodic refreshes.
+const navigateBefore084=navigate;
+navigate=function(view){navigateBefore084(view);if(view==='health')refreshTrends084().catch(e=>toast(e.message,true));if(view==='my-node')refreshOwn084(true).catch(e=>toast(e.message,true));};
+const refreshBefore084=refresh;
+refresh=async function(){await refreshBefore084();if(S.page==='health')await refreshTrends084().catch(e=>toast(e.message,true));if(S.page==='my-node')await refreshOwn084(false).catch(e=>toast(e.message,true));};
