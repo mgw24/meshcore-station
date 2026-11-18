@@ -1,4 +1,4 @@
-"""0.8.6 channel history name contract, without live T114 hardware."""
+"""0.8.7 channel history name contract, without live T114 hardware."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +9,8 @@ def test_channel_names_come_from_live_status_not_database_rewrites():
     assert 'function channelName086(target)' in JS
     assert 'S.status?.channels' in JS
     assert 'S.channels?.slots' in JS
-    assert "const author=genericChannelSender?channelName:originalSender" in JS
+    assert "const author=messageDisplaySender086(m)" in JS
+    assert 'const author=messageDisplaySender086(m)' in JS
     assert 'const dest=isChannel?`${channelName} (#${m.target})`' in JS
 
 
@@ -28,6 +29,6 @@ def test_fallback_and_safe_output():
 
 
 def test_version_migration_is_consistent():
-    assert (ROOT / 'VERSION').read_text().strip() == '0.8.6'
-    assert "'version': '0.8.6'" in (ROOT / 'station/web.py').read_text()
-    assert 'MeshCore 0.8.6 · USB Companion' in (ROOT / 'static/index.html').read_text()
+    assert (ROOT / 'VERSION').read_text().strip() == '0.8.7'
+    assert "'version': '0.8.7'" in (ROOT / 'station/web.py').read_text()
+    assert 'MeshCore 0.8.7 · USB Companion' in (ROOT / 'static/index.html').read_text()

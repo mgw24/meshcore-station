@@ -48,4 +48,4 @@ def test_history_endpoints_are_preserved():
     assert '/api/radio/trends' in api
     assert '/api/radio/diagnostics' in api
     assert '/api/radio/rx-log' in api
-    assert 'MeshCore Station 0.8.6' in api
+    assert 'MeshCore Station 0.8.7' in api

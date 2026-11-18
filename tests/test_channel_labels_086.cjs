@@ -31,4 +31,4 @@ assert.equal(senderMarkup(html({target:'5'})),'&lt;script&gt;alert(1)&lt;/script
 assert(!html({target:'5'}).includes('<script>'),'Must not render raw HTML in channel label');
 assert.match(app,/dest='channel:'\+channel/,'Reply still uses unchanged numeric slot');
 assert.match(app,/if\(names!==lastChannelNames086\)/,'Refresh renamed channel labels without reloading messages');
-console.log('0.8.6 channel-name behavior: 12 checks passed');
+console.log('0.8.7 channel-name behavior: 12 checks passed');

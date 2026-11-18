@@ -1,4 +1,4 @@
-"""0.8.6 UI integration contract without requiring a browser or radio."""
+"""0.8.7 UI integration contract without requiring a browser or radio."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +35,7 @@ def test_original_search_pagination_and_escape_retained():
 
 
 def test_version_metadata():
-    assert (ROOT/'VERSION').read_text().strip() == '0.8.6'
-    assert '# MeshCore Station 0.8.6' in (ROOT/'README.md').read_text()
-    assert 'MeshCore 0.8.6 · USB Companion' in HTML
-    assert "'version': '0.8.6'" in (ROOT/'station/web.py').read_text()
+    assert (ROOT/'VERSION').read_text().strip() == '0.8.7'
+    assert '# MeshCore Station 0.8.7' in (ROOT/'README.md').read_text()
+    assert 'MeshCore 0.8.7 · USB Companion' in HTML
+    assert "'version': '0.8.7'" in (ROOT/'station/web.py').read_text()

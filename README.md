@@ -1,4 +1,4 @@
-# MeshCore Station 0.8.6
+# MeshCore Station 0.8.7
 
 **MeshCore Station** is a self-hosted web console for operating and monitoring a MeshCore USB Companion radio. It is built for a Heltec T114 V2 connected to an Ubuntu Linux server or virtual machine, with browser access from desktop and mobile devices.
 
@@ -6,7 +6,7 @@ The project combines messaging, radio diagnostics, node discovery, maps, and his
 
 ## Features and capabilities
 
-- **Messaging:** Send channel and direct messages, browse a compact searchable history with configured channel names, filter and export records, expand messages for details, and compose `@name` channel replies or replies to identified direct contacts.
+- **Messaging:** Send channel and direct messages, browse a compact searchable history and an Overview preview with configured channel names, filter and export records, expand messages for details, and compose `@name` channel replies or replies to identified direct contacts.
 - **Transmission diagnostics:** Show when the radio accepts a message and record matching channel echoes or supported direct-message acknowledgments. Delivery remains unconfirmed without evidence.
 - **Radio Monitor:** One consolidated page for radio health, telemetry, routing diagnostics and outbound evidence. Track RX/TX packet rates, flood versus direct traffic, receive errors, RSSI, SNR when available, noise floor, uptime, and suspected radio resets.
 - **Nodes and contacts:** Discover MeshCore contacts, identify companions, repeaters, room servers, and sensors with distinct markers, and maintain a separate address book with nicknames, favorites, and notes.
@@ -23,4 +23,4 @@ A Docker-based collector communicates with the T114 over USB serial and records 
 
 MeshCore Station runs with **USB Companion firmware**; it does not turn the connected radio into a mesh repeater. Radio acceptance or a transmitted-packet count does not by itself prove that another node received a message. Private map coordinates are not broadcast unless location sharing is explicitly enabled.
 
-**Current release:** `0.8.6` · [Project source](https://github.com/mgw24/meshcore-station)
+**Current release:** `0.8.7` · [Project source](https://github.com/mgw24/meshcore-station)

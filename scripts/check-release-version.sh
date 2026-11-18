@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-EXPECTED="${1:-0.8.6}"
+EXPECTED="${1:-0.8.7}"
 ACTUAL="$(tr -d '\r\n' < VERSION)"
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "VERSION is $ACTUAL, expected $EXPECTED" >&2; exit 1; }
 [[ -f "RELEASE-$EXPECTED.md" ]] || { echo "Missing release notes" >&2; exit 1; }
@@ -17,5 +17,8 @@ for file in station/tx_tracking.py station/radio_trends.py station/node_adverts.
 done
 # Archive labels must resolve channel names from live status, never hard-code slot titles.
 grep -Fq 'function channelName086(target)' static/app.js || { echo 'Channel name resolver missing' >&2; exit 1; }
-grep -Fq 'genericChannelSender?channelName:originalSender' static/app.js || { echo 'Channel sender label update missing' >&2; exit 1; }
+grep -Fq 'const author=messageDisplaySender086(m)' static/app.js || { echo 'Shared channel sender resolver missing from archive' >&2; exit 1; }
+grep -Fq 'function messageHeading(m){const node=messageDisplaySender086(m)' static/app.js || { echo 'Overview channel resolver missing' >&2; exit 1; }
+grep -Fq 'function messageDisplaySender086(m)' static/app.js || { echo 'Shared Overview/archive label resolver missing' >&2; exit 1; }
+grep -Fq '?v=087' static/index.html || { echo 'App cache-buster not bumped' >&2; exit 1; }
 echo "Release consistency: $EXPECTED OK"

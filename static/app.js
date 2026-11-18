@@ -40,7 +40,7 @@ function renderTxDiagnostics(){
 
 }
 
-function messageHeading(m){const node=(m.direction==='out')?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'Local node'):(m.sender||'Unknown');return `${m.kind==='channel'?'#'+m.target:'Direct'} · ${m.direction==='in'?'Received':'Sent'} · ${node}`}
+function messageHeading(m){const node=messageDisplaySender086(m);return `${m.kind==='channel'?'#'+m.target:'Direct'} · ${m.direction==='in'?'Received':'Sent'} · ${node}`}
 function item(title,body,time,dot=''){return `<div class="stream-item"><span class="dot ${H(dot)}"></span><div class="stream-main"><div class="stream-head"><div class="stream-title">${H(title)}</div><time class="stream-time">${H(dt(time))}</time></div><div class="stream-body">${H(body)}</div></div></div>`}
 function plot(element, values, key, unit){
   const target=$(element), list=values.filter(x=>typeof x[key]==='number' && Number.isFinite(x[key]));
@@ -444,6 +444,14 @@ function channelName086(target){
  const found=sources.find(c=>Number(c.index)===index&&String(c.name||'').trim());
  return found?String(found.name).trim():`Channel ${index}`;
 }
+// Reused by the Overview recent-message list and the Messages archive.
+// A generic radio sender label is not a person: display the configured channel.
+function messageDisplaySender086(m){
+ const outgoing=m.direction==='out';
+ const sender=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
+ const generic=!outgoing&&m.kind==='channel'&&/^(channel|unknown(?: sender)?)$/i.test(String(m.sender||'').trim());
+ return generic?channelName086(m.target):sender;
+}
 function channelNameSignature086(){
  return JSON.stringify(Array.from({length:8},(_,i)=>channelName086(i)));
 }
@@ -455,7 +463,7 @@ function messageArchiveEntry081(m){
  // Companion firmware may store the literal "channel" as the incoming sender.
  // Show the actual channel name in the row, without implying it is the sender's identity.
  const genericChannelSender=!outgoing&&isChannel&&/^(channel|unknown(?: sender)?)$/i.test(String(m.sender||'').trim());
- const author=genericChannelSender?channelName:originalSender;
+ const author=messageDisplaySender086(m);
  const actualSender=genericChannelSender?(channelReplySender082(m)||'Not identified'):originalSender;
  const dest=isChannel?`${channelName} (#${m.target})`:'Direct';
  const status=outgoing?txLabel(m):'Received';
