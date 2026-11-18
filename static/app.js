@@ -557,17 +557,30 @@ function resolveDirectSender082(sender){
  });
  return matches.length===1?matches[0]:null;
 }
+// Channel message identities are carried in the firmware's text envelope:
+// "Sender Name: message text". The sender field is often just "channel";
+// it cannot be used as the @mention by itself.
+function channelReplySender082(m){
+ const envelope=/^([^:\r\n]{1,70}):\s*/.exec(String(m.text??''));
+ const known=resolveDirectSender082(m.sender);
+ const candidate=envelope?.[1] || known?.name || m.sender || '';
+ const name=String(candidate).replace(/[\x00-\x1f\x7f]/g,'').trim().replace(/^@+/, '').slice(0,70);
+ if(!name || /^(unknown(?: sender)?|channel|anonymous)$/i.test(name))return '';
+ // Never turn an unresolved public-key prefix into a misleading username.
+ if(!envelope && !known && /^[0-9a-f]{8,128}$/i.test(name))return '';
+ return name;
+}
 function createReply082(id){
  const m=M081.items.find(x=>Number(x.id)===Number(id));
  if(!m || m.direction!=='in')return;
  let dest,body='',notice='';
  if(m.kind==='channel'){
-  if(!/^[0-7]$/.test(String(m.target||''))){toast('Original channel is unavailable for reply',true);return;}
-  dest='channel:'+m.target;
-  const known=resolveDirectSender082(m.sender);
-  const sender=String(known?.name||m.sender||'').replace(/[\x00-\x1f\x7f]/g,'').trim().replace(/^@+/, '').slice(0,70);
-  if(sender && !/^(unknown|channel)$/i.test(sender))body='@'+sender+' ';
-  notice=sender?`Reply to ${sender} on channel ${m.target}`:`Reply on channel ${m.target}`;
+  const channel=String(m.target??'');
+  if(!/^[0-7]$/.test(channel)){toast('Original channel is unavailable for reply',true);return;}
+  dest='channel:'+channel;
+  const sender=channelReplySender082(m);
+  if(sender)body='@'+sender+' ';
+  notice=sender?`Reply to ${sender} on channel ${channel}`:`Reply on channel ${channel} (sender name unavailable)`;
  }else if(m.kind==='direct'){
   const match=resolveDirectSender082(m.sender);
   if(!match){toast('Direct sender is not uniquely identified in the T114 contacts. Sync contacts and choose the recipient manually.',true);return;}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-EXPECTED="${1:-0.8.2}"
+EXPECTED="${1:-0.8.3}"
 ACTUAL="$(tr -d '\r\n' < VERSION)"
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "VERSION is $ACTUAL, expected $EXPECTED" >&2; exit 1; }
 [[ -f "RELEASE-$EXPECTED.md" ]] || { echo "Missing release notes" >&2; exit 1; }

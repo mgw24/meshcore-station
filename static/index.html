@@ -25,7 +25,7 @@
   </nav><div class="nav-label">MAINTENANCE</div>
   <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
-  </nav><div class="side-footer"><div>MeshCore 0.8.2 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+  </nav><div class="side-footer"><div>MeshCore 0.8.3 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
   <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
@@ -116,7 +116,7 @@
 <div id="map-canvas" class="node-map" role="region" aria-label="Interactive MeshCore node map"><div class="map-tiles" id="map-tiles"></div><div class="map-pins" id="map-pins"></div><div class="map-fallback" id="map-fallback" hidden>Base-map tiles are unavailable. Node positions remain visible on the coordinate grid.</div><div class="map-attribution">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div></div><p id="map-summary" class="hint"></p></article>
 <article class="panel"><div class="panel-head"><h2>Unmapped contacts and location overrides</h2></div><div id="map-unmapped" class="stream"></div><form id="manual-location-form" class="map-location-form"><label>Contact<select id="map-contact" required></select></label><label>Latitude<input id="map-lat" type="number" min="-90" max="90" step="any" required></label><label>Longitude<input id="map-lon" type="number" min="-180" max="180" step="any" required></label><button class="button secondary" type="submit">Save manual location</button><button class="button secondary" type="button" id="map-clear">Clear manual location</button></form><p class="hint">Manual coordinates override advertised values until cleared. Node presence on the map does not mean the radio is currently reachable.</p></article></section>
 <section id="view-diagnostics" class="view" hidden>
-  <div class="panel-head"><div><span class="eyebrow">RADIO DIAGNOSTICS · 0.8.2</span><h2>Traffic, routing &amp; transmission evidence</h2></div>
+  <div class="panel-head"><div><span class="eyebrow">RADIO DIAGNOSTICS · 0.8.3</span><h2>Traffic, routing &amp; transmission evidence</h2></div>
     <div class="actions"><label class="rx-filter">Window<select id="diag-window"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label><button class="button secondary" id="diag-refresh" type="button">Refresh diagnostics</button></div></div>
   <div class="kpis" id="diag-kpis" aria-live="polite"></div>
   <div class="two-col">
@@ -145,7 +145,7 @@
  <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
 </section>
 <section id="view-routing" class="view" hidden>
- <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.2</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
+ <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.3</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
  <div class="two-col">
   <article class="panel"><h2>Path hash</h2><p class="hint">Longer paths help identify repeaters, but older repeaters may drop 2- and 3-byte hash packets.</p>
    <p id="routing-current-hash" class="hint">Current hardware mode: not read</p>

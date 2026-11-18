@@ -37,7 +37,7 @@ from typing import Literal
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
 
-app = FastAPI(title='MeshCore Station 0.8.2', docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title='MeshCore Station 0.8.3', docs_url=None, redoc_url=None, openapi_url=None)
 BASE = Path(__file__).resolve().parent.parent
 app.mount('/assets', StaticFiles(directory=BASE / 'static'), name='assets')
 signer = URLSafeTimedSerializer(SESSION_SECRET, salt='meshcore-station-auth')
@@ -133,7 +133,7 @@ def status(session=Depends(user_session)):
 
 @app.get('/api/version')
 def version(session=Depends(user_session)):
-    return {'version': '0.8.2', 'release': 'Messages & Release Consistency'}
+    return {'version': '0.8.3', 'release': 'Messages & Release Consistency'}
 
 @app.get('/api/radio/diagnostics')
 def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
@@ -168,7 +168,7 @@ def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
     def val(key):
         row = status_rows.get(key)
         return (row.value or {}) if row else {}
-    return {'version': '0.8.2', 'window_hours': hours,
+    return {'version': '0.8.3', 'window_hours': hours,
             'collector_online': bool(age is not None and age < 35 and reported.get('connected')),
             'heartbeat_age_secs': age, 'traffic': sample_window(samples, now),
             'routing': {'observed': val('routing_observed'),
