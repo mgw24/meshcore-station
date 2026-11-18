@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-EXPECTED="${1:-0.8.5}"
+EXPECTED="${1:-0.8.6}"
 ACTUAL="$(tr -d '\r\n' < VERSION)"
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "VERSION is $ACTUAL, expected $EXPECTED" >&2; exit 1; }
 [[ -f "RELEASE-$EXPECTED.md" ]] || { echo "Missing release notes" >&2; exit 1; }
@@ -15,4 +15,7 @@ if grep -Eq 'data-view="(health|diagnostics|telemetry)"' static/index.html; then
 for file in station/tx_tracking.py station/radio_trends.py station/node_adverts.py; do
   [[ -f "$file" ]] || { echo "Missing required 0.8.4 dependency: $file" >&2; exit 1; }
 done
+# Archive labels must resolve channel names from live status, never hard-code slot titles.
+grep -Fq 'function channelName086(target)' static/app.js || { echo 'Channel name resolver missing' >&2; exit 1; }
+grep -Fq 'genericChannelSender?channelName:originalSender' static/app.js || { echo 'Channel sender label update missing' >&2; exit 1; }
 echo "Release consistency: $EXPECTED OK"

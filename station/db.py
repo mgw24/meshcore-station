@@ -62,12 +62,12 @@ class Message(Base):
     meta = Column(JSON, default=dict)
 
 class TxEvidence(Base):
-    """Persistent evidence associated with one outbound message."""
-    __tablename__ = "tx_evidence"
+    """Persistent evidence associated with a specific outbound message."""
+    __tablename__ = 'tx_evidence'
     id = Column(Integer, primary_key=True)
     message_id = Column(Integer, nullable=False, index=True)
     ts = Column(DateTime(timezone=True), default=utcnow, index=True)
-    kind = Column(String(40), nullable=False)
+    kind = Column(String(40), nullable=False)  # radio_accepted | direct_ack | channel_echo
     detail = Column(JSON, default=dict)
 
 class RadioEvent(Base):
@@ -165,7 +165,7 @@ class DigestDelivery(Base):
     __tablename__ = 'digest_deliveries'
     id = Column(Integer, primary_key=True)
     slot_key = Column(String(90), unique=True, nullable=True)
-    kind = Column(String(16), nullable=False)  # scheduled | manual | test
+    kind = Column(String(16), nullable=False)  # scheduled | manual | test | probe
     status = Column(String(20), nullable=False, default='queued')
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     started_at = Column(DateTime(timezone=True), nullable=True)

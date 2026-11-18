@@ -8,6 +8,7 @@ import os
 import re
 import smtplib
 import ssl
+import socket
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -317,6 +318,48 @@ def send_email(cfg, subject, text_body, html_body=None):
             smtp.login(cfg.smtp_username, decrypt_password(cfg.smtp_password_enc))
         smtp.send_message(message)
     return len(recipients)
+
+
+
+class SMTPProbeError(ValueError):
+    """Safe, step-specific mail diagnostic with no server reply disclosure."""
+
+
+def probe_smtp(cfg):
+    """Check DNS, TCP, TLS, and optional auth. Does NOT send a message."""
+    validate_mail_ready(cfg)
+    host, port = cfg.smtp_host.strip(), cfg.smtp_port
+    stage = 'DNS lookup'
+    try:
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        stage = 'TCP connection / SMTP greeting'
+        context = ssl.create_default_context()
+        if cfg.smtp_security == 'ssl':
+            smtp = smtplib.SMTP_SSL(host, port, timeout=15, context=context)
+        else:
+            smtp = smtplib.SMTP(host, port, timeout=15)
+        with smtp:
+            smtp.ehlo()
+            if cfg.smtp_security == 'starttls':
+                stage = 'STARTTLS negotiation'
+                if not smtp.has_extn('starttls'):
+                    raise SMTPProbeError('STARTTLS negotiation: server does not advertise STARTTLS')
+                smtp.starttls(context=context)
+                smtp.ehlo()
+            if cfg.smtp_username:
+                stage = 'SMTP authentication'
+                smtp.login(cfg.smtp_username, decrypt_password(cfg.smtp_password_enc))
+    except SMTPProbeError:
+        raise
+    except socket.gaierror:
+        raise SMTPProbeError('DNS lookup failed. Check the SMTP hostname and DNS on the VM.') from None
+    except smtplib.SMTPAuthenticationError:
+        raise SMTPProbeError('SMTP authentication failed. Check username and app password.') from None
+    except ssl.SSLError:
+        raise SMTPProbeError(f'{stage} failed: TLS certificate or handshake problem.') from None
+    except (TimeoutError, OSError, smtplib.SMTPException) as exc:
+        raise SMTPProbeError(f'{stage} failed: {safe_smtp_error(exc)}') from None
+    return 'DNS, SMTP connection, TLS, and configured authentication succeeded; no email was sent.'
 
 
 def safe_smtp_error(exc):

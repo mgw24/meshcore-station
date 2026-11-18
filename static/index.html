@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=085"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=086"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -23,7 +23,7 @@
   </nav><div class="nav-label">MAINTENANCE</div>
   <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
-  </nav><div class="side-footer"><div>MeshCore 0.8.5 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+  </nav><div class="side-footer"><div>MeshCore 0.8.6 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
   <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
@@ -172,7 +172,7 @@
  <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
 </section>
 <section id="view-routing" class="view" hidden>
- <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.5</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
+ <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.6</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
  <div class="two-col">
   <article class="panel"><h2>Path hash</h2><p class="hint">Longer paths help identify repeaters, but older repeaters may drop 2- and 3-byte hash packets.</p>
    <p id="routing-current-hash" class="hint">Current hardware mode: not read</p>
@@ -256,4 +256,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=085"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=086"></script></body></html>

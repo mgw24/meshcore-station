@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from station.db import (initialize, Session, DigestSettings, DigestDelivery, utcnow,
                         status_set)
 from station.digest import (settings, validate_mail_ready, latest_due, prior_slot,
-                            aware_utc, lookback, report, send_email, safe_smtp_error)
+                            aware_utc, lookback, report, send_email, safe_smtp_error, probe_smtp)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('meshcore.digest')
@@ -93,6 +93,15 @@ def deliver(job_id):
         try:
             if error:
                 raise ValueError(error)
+            if kind == 'probe':
+                detail = probe_smtp(cfg)
+                with Session.begin() as update_db:
+                    rec = update_db.get(DigestDelivery, job_id)
+                    rec.status = 'passed'
+                    rec.finished_at = utcnow()
+                    rec.error = detail
+                log.info('SMTP diagnostic job %s passed', job_id)
+                return
             if kind == 'test':
                 subject = 'MeshCore Station · SMTP test'
                 text_body = ('This is a test email from your MeshCore Station.\n'
@@ -107,7 +116,7 @@ def deliver(job_id):
             recipients = send_email(cfg, subject, text_body, html_body)
         except Exception as exc:
             sanitized = safe_smtp_error(exc)
-            log.warning('Digest job %s failed (%s)', job_id, type(exc).__name__)
+            log.warning('Digest job %s (%s) failed (%s): %s', job_id, kind, type(exc).__name__, sanitized)
             with Session.begin() as update_db:
                 rec = update_db.get(DigestDelivery, job_id)
                 rec.status = 'failed'

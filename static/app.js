@@ -434,10 +434,30 @@ function compactTimestamp082(value){
  const opts=(today.toDateString()===d.toDateString())?{hour:'numeric',minute:'2-digit'}:{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'};
  return d.toLocaleString(undefined,opts);
 }
+// 0.8.6 — Use the radio's cached channel names in archived messages.
+// The message records store a stable slot number, not a historical channel title.
+// If an operator renames a slot, existing history intentionally shows its current name.
+function channelName086(target){
+ const index=Number(target);
+ if(!Number.isInteger(index)||index<0||index>7)return 'Channel '+String(target??'?');
+ const sources=[...(S.status?.channels||[]),...(S.channels?.slots||[])];
+ const found=sources.find(c=>Number(c.index)===index&&String(c.name||'').trim());
+ return found?String(found.name).trim():`Channel ${index}`;
+}
+function channelNameSignature086(){
+ return JSON.stringify(Array.from({length:8},(_,i)=>channelName086(i)));
+}
 function messageArchiveEntry081(m){
  const outgoing=m.direction==='out';
- const author=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
- const dest=m.kind==='channel'?`#${m.target}`:'Direct';
+ const isChannel=m.kind==='channel';
+ const channelName=isChannel?channelName086(m.target):'';
+ const originalSender=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
+ // Companion firmware may store the literal "channel" as the incoming sender.
+ // Show the actual channel name in the row, without implying it is the sender's identity.
+ const genericChannelSender=!outgoing&&isChannel&&/^(channel|unknown(?: sender)?)$/i.test(String(m.sender||'').trim());
+ const author=genericChannelSender?channelName:originalSender;
+ const actualSender=genericChannelSender?(channelReplySender082(m)||'Not identified'):originalSender;
+ const dest=isChannel?`${channelName} (#${m.target})`:'Direct';
  const status=outgoing?txLabel(m):'Received';
  const statusCss=!outgoing?'received':(/ack|repeat/i.test(status)?'verified':/fail/i.test(status)?'error':'unconfirmed');
  const evidence=(m.tx_evidence||[]).map(e=>{
@@ -450,14 +470,14 @@ function messageArchiveEntry081(m){
    <span class="message-row-direction" aria-label="${outgoing?'Sent':'Received'}" title="${outgoing?'Sent':'Received'}">${outgoing?'↗':'↙'}</span>
    <strong class="message-row-sender" title="${H(author)}">${H(author)}</strong>
    <span class="message-row-preview" title="${H(m.text)}">${H(m.text)}</span>
-   <span class="message-row-target">${H(dest)}</span>
+   <span class="message-row-target" title="${H(dest)}">${H(dest)}</span>
    <time class="message-row-time" datetime="${H(m.ts)}" title="${H(dt(m.ts))}">${H(compactTimestamp082(m.ts))}</time>
    <span class="message-row-caret" aria-hidden="true">⌄</span>
   </summary>
   <div class="message-row-expanded">
    <div class="message-row-top"><span class="message-state ${statusCss}">${H(status)}</span><span class="message-row-fulltime">${H(dt(m.ts))}</span></div>
    <p class="message-row-body">${H(m.text)}</p>
-   <dl class="message-row-meta"><dt>From</dt><dd>${H(author)}</dd><dt>Direction</dt><dd>${outgoing?'Outgoing':'Incoming'}</dd><dt>Destination</dt><dd>${H(m.kind==='channel'?'Channel '+m.target:'Direct message')}</dd><dt>Status</dt><dd>${H(m.status)}</dd></dl>
+   <dl class="message-row-meta"><dt>From</dt><dd>${H(actualSender)}</dd><dt>Direction</dt><dd>${outgoing?'Outgoing':'Incoming'}</dd><dt>Conversation</dt><dd>${H(isChannel?dest:'Direct message')}</dd><dt>Status</dt><dd>${H(m.status)}</dd></dl>
    ${outgoing?`<div class="message-row-evidence"><strong>TX evidence</strong>${evidence?`<ul>${evidence}</ul>`:'<p>No matching radio evidence recorded. This does not mean the transmission failed.</p>'}</div>`:''}
    <div class="message-row-actions">
     ${!outgoing?`<button type="button" class="button primary message-reply" data-reply-message="${Number(m.id)}">↩ ${replyLabel}</button>`:''}
@@ -520,7 +540,15 @@ $('history-refresh').addEventListener('click',reloadMessageHistory);
 $('history-more').addEventListener('click',loadOlderMessages081);
 // Keep the archive fresh while the Messages page is open, without reloading older pages.
 const refreshBefore081=refresh;
-refresh=async function(){await refreshBefore081();if(S.page==='messages')await refreshMessageHistoryTop081();};
+let lastChannelNames086='';
+refresh=async function(){
+ await refreshBefore081();
+ if(S.page==='messages'){
+  await refreshMessageHistoryTop081();
+  const names=channelNameSignature086();
+  if(names!==lastChannelNames086){lastChannelNames086=names;if(M081.started)renderMessageArchive081();}
+ }
+};
 
 
 // 0.8.2 — Context-aware reply to an archived message. Plain @mentions on channels;
