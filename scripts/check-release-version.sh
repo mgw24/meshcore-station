@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-EXPECTED="${1:-0.8.4}"
+EXPECTED="${1:-0.8.5}"
 ACTUAL="$(tr -d '\r\n' < VERSION)"
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "VERSION is $ACTUAL, expected $EXPECTED" >&2; exit 1; }
 [[ -f "RELEASE-$EXPECTED.md" ]] || { echo "Missing release notes" >&2; exit 1; }
@@ -10,4 +10,9 @@ grep -Fq "MeshCore $EXPECTED · USB Companion" static/index.html || { echo "UI v
 grep -Fq "MeshCore Station $EXPECTED" station/web.py || { echo "API title mismatch" >&2; exit 1; }
 grep -Fq "'version': '$EXPECTED'" station/web.py || { echo "API version mismatch" >&2; exit 1; }
 grep -Fq "# MeshCore Station $EXPECTED" "RELEASE-$EXPECTED.md" || { echo "Release notes mismatch" >&2; exit 1; }
-echo "Release version consistency: $EXPECTED ✓"
+grep -Fq 'data-view="monitor"' static/index.html || { echo "Monitor nav missing" >&2; exit 1; }
+if grep -Eq 'data-view="(health|diagnostics|telemetry)"' static/index.html; then echo 'Legacy monitor navigation still visible' >&2; exit 1; fi
+for file in station/tx_tracking.py station/radio_trends.py station/node_adverts.py; do
+  [[ -f "$file" ]] || { echo "Missing required 0.8.4 dependency: $file" >&2; exit 1; }
+done
+echo "Release consistency: $EXPECTED OK"

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=084"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=085"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -17,15 +17,13 @@
     <button class="nav" data-view="nodes">⟠ <span>Nodes & Contacts</span></button>
     <button class="nav" data-view="address">♧ <span>Address Book</span></button>
     <button class="nav" data-view="map">◎ <span>Node Map</span></button>
-    <button class="nav" data-view="health">◉ <span>Radio Health</span></button><button class="nav" data-view="my-node">⌖ <span>My Node &amp; Adverts</span></button>
-    <button class="nav" data-view="diagnostics">◌ <span>Radio Diagnostics</span></button>
-    <button class="nav" data-view="telemetry">⌁ <span>Telemetry</span></button>
+    <button class="nav" data-view="monitor">◉ <span>Radio Monitor</span></button><button class="nav" data-view="my-node">⌖ <span>My Node &amp; Adverts</span></button>
     <button class="nav" data-view="alerts">◈ <span>Alerts</span></button>
     <button class="nav" data-view="events">☷ <span>Event Log</span></button>
   </nav><div class="nav-label">MAINTENANCE</div>
   <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
-  </nav><div class="side-footer"><div>MeshCore 0.8.4 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+  </nav><div class="side-footer"><div>MeshCore 0.8.5 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
   <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
@@ -89,29 +87,45 @@
   </article>
  </div>
 </section>
-<section id="view-health" class="view" hidden>
- <div class="kpis health-kpis">
-  <article class="kpi"><span class="eyebrow">VALID RX PACKETS</span><b id="health-rx">—</b><small>Since device boot</small></article>
-  <article class="kpi"><span class="eyebrow">TRANSMITTED PACKETS</span><b id="health-tx">—</b><small>Since device boot</small></article>
-  <article class="kpi"><span class="eyebrow">RX ERRORS / CRC</span><b id="health-errors">—</b><small>Since device boot</small></article>
-  <article class="kpi"><span class="eyebrow">TELEMETRY AGE</span><b id="health-age">—</b><small id="health-freshness">Last recorded sample</small></article>
+<section id="view-monitor" class="view monitor-view" hidden>
+ <div class="monitor-heading panel-head"><div><span class="eyebrow">T114 USB COMPANION · RADIO MONITOR</span><h2>Radio activity and diagnostics</h2><p class="hint">One view for packet rates, signal quality, radio health, and transmission evidence.</p></div>
+  <div class="actions"><label class="rx-filter">History<select id="monitor-window"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="168">7 days</option></select></label><button class="button secondary" id="monitor-refresh" type="button">Refresh</button></div></div>
+ <div class="kpis monitor-kpis" aria-live="polite">
+  <article class="kpi"><span class="eyebrow">RADIO CONNECTION</span><b id="monitor-connection">—</b><small id="health-freshness">Awaiting telemetry</small></article>
+  <article class="kpi"><span class="eyebrow">RX / MIN</span><b id="trend-rx">—</b><small>Last valid sample interval</small></article>
+  <article class="kpi"><span class="eyebrow">TX / MIN</span><b id="trend-tx">—</b><small>Last valid sample interval</small></article>
+  <article class="kpi"><span class="eyebrow">RX ERRORS / MIN</span><b id="monitor-error-rate">—</b><small>Last valid sample interval</small></article>
+  <article class="kpi"><span class="eyebrow">RADIO UPTIME</span><b id="trend-uptime">—</b><small>Since radio boot</small></article>
+  <article class="kpi"><span class="eyebrow">POSSIBLE RESETS</span><b id="trend-resets">—</b><small>Selected history window</small></article>
  </div>
- <article class="panel"><div class="panel-head"><div><span class="eyebrow">RESET-AWARE TRENDS</span><h2>Radio performance over time</h2></div><div class="actions"><label class="rx-filter">History<select id="trends-window"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="168">7 days</option></select></label><button class="button secondary" id="trends-reload">Refresh</button></div></div>
-<div class="kpis trends-kpis"><article class="kpi"><span class="eyebrow">LATEST RX / MIN</span><b id="trend-rx">—</b></article><article class="kpi"><span class="eyebrow">LATEST TX / MIN</span><b id="trend-tx">—</b></article><article class="kpi"><span class="eyebrow">POSSIBLE RESETS</span><b id="trend-resets">—</b></article><article class="kpi"><span class="eyebrow">UPTIME</span><b id="trend-uptime">—</b></article></div>
-<div class="two-col trends-grid"><div><h3>RX / TX · packets per minute</h3><div id="trend-traffic" class="chart"></div></div><div><h3>Flood vs direct · packets per minute</h3><div id="trend-paths" class="chart"></div></div><div><h3>Receive errors · per minute</h3><div id="trend-errors" class="chart"></div></div><div><h3>RSSI &amp; noise floor · dBm</h3><div id="trend-rf" class="chart"></div></div><div><h3>SNR · dB</h3><div id="trend-snr" class="chart"></div></div><div><h3>Radio uptime &amp; detected resets</h3><div id="trend-uptime-chart" class="chart"></div><div id="trend-reset-list" class="radio-reset-list"></div></div></div>
-<p class="hint">Packet rates are averages between telemetry samples (not individual packet timestamps). Gaps and counter resets do not generate fake zeroes. RSSI/SNR are last-packet readings reported by firmware; missing values are not estimated.</p>
-</article>
-<div class="two-col"><article class="panel"><div class="panel-head"><h2>Packets received / transmitted</h2><span class="legend">Live hardware counters</span></div><div id="health-rx-chart" class="chart"></div><div id="health-tx-chart" class="chart"></div><p id="health-tx-note" class="hint">Waiting for TX statistics.</p></article>
- <article class="panel"><div class="panel-head"><h2>Receive error history</h2></div><div id="health-error-chart" class="chart"></div><p class="hint">Counters can reset when the T114 reboots. RF packets include advertisements and repeater traffic, not only messages.</p></article></div>
- <article class="panel"><div class="panel-head"><div><span class="eyebrow">OUTBOUND EVIDENCE</span><h2>TX confirmation tracking</h2></div><span class="legend">Latest 100 outbound messages</span></div>
- <div class="tx-stats" id="tx-confirmation-stats" aria-live="polite"></div>
- <p class="hint">Radio accepted ≠ delivered. Exact-match direct ACKs confirm a direct message was acknowledged. Channel echoes indicate a matching relayed copy was heard, not that any particular user received or read it. Not all firmware builds expose echoes.</p>
- <div id="tx-confirmation-list" class="stream" aria-live="polite"></div>
- </article>
- <article class="panel"><div class="panel-head"><h2>Radio diagnostics</h2></div><div id="health-details" class="health-details" aria-live="polite"></div></article>
- <article class="panel"><div class="panel-head"><div><span class="eyebrow">LIVE RADIO</span><h2>RX activity log</h2></div><div class="actions"><label class="rx-filter">Show<select id="rx-filter"><option value="">All activity</option><option value="channel">Channel messages</option><option value="direct">Direct messages</option><option value="advert">Advertisements</option><option value="rx_log">RF log data</option><option value="counter_delta">Packet counter changes</option><option value="counter_reset">Counter resets</option></select></label></div></div>
- <p class="hint">Decoded receive events appear individually when supplied by the firmware. Counter changes are sampled roughly once per minute; they do not identify individual packets, senders, or exact reception times. Raw packet contents and channel secrets are never stored in this log.</p>
- <div id="health-rx-log" class="rx-log" aria-live="polite"></div></article>
+ <article class="panel monitor-primary"><div class="panel-head"><div><span class="eyebrow">TRAFFIC ACTIVITY</span><h2>Received and transmitted packets</h2></div><span class="legend">Packets per minute</span></div><div id="trend-traffic" class="chart"></div><p class="hint">Rates are averages between valid radio samples—not packet-by-packet timestamps. Radio counter resets and missing intervals never become fictitious zeros.</p></article>
+ <details class="panel monitor-section" open><summary><span><b>Signal &amp; Power</b><small>RSSI, noise floor, SNR and battery where available</small></span><span class="monitor-chevron" aria-hidden="true">⌄</span></summary>
+  <div class="monitor-section-body"><div id="monitor-signal-details" class="health-details monitor-signal-readings"></div>
+   <div class="two-col trends-grid"><div><h3>RSSI &amp; noise floor · dBm</h3><div id="trend-rf" class="chart"></div></div><div><h3>SNR · dB</h3><div id="trend-snr" class="chart"></div></div></div>
+   <div id="battery-panel"><h3>Battery history · %</h3><div id="battery-chart" class="chart"></div></div>
+   <p class="hint">RSSI and SNR are firmware-provided last-packet measurements. Unavailable readings are not estimated. Battery history is hidden when operating on USB without a battery.</p>
+  </div>
+ </details>
+ <details class="panel monitor-section"><summary><span><b>Packet Analysis &amp; Uptime</b><small>Flood/direct rates, receive errors, counter totals and reset events</small></span><span class="monitor-chevron" aria-hidden="true">⌄</span></summary>
+  <div class="monitor-section-body"><div class="two-col trends-grid"><div><h3>Flood vs direct · packets per minute</h3><div id="trend-paths" class="chart"></div></div><div><h3>Receive errors · per minute</h3><div id="trend-errors" class="chart"></div></div><div><h3>Radio uptime · seconds</h3><div id="trend-uptime-chart" class="chart"></div><div id="trend-reset-list" class="radio-reset-list"></div></div></div>
+   <h3>Hardware counters · since radio boot</h3><div class="monitor-counts"><div><span>Received</span><b id="health-rx">—</b></div><div><span>Transmitted</span><b id="health-tx">—</b></div><div><span>Receive errors</span><b id="health-errors">—</b></div><div><span>Sample age</span><b id="health-age">—</b></div></div>
+   <div id="health-details" class="health-details monitor-counter-detail"></div>
+   <p class="hint">Since-boot counters differ from interval rates. RF packet totals include advertisements and routing traffic, not just messages; successful TX does not establish delivery.</p>
+  </div>
+ </details>
+ <details class="panel monitor-section"><summary><span><b>Transmission Evidence</b><small>Radio acceptance, direct ACKs, channel echoes and outbound history</small></span><span class="monitor-chevron" aria-hidden="true">⌄</span></summary>
+  <div class="monitor-section-body"><div id="tx-confirmation-stats" class="tx-stats" aria-live="polite"></div>
+   <p class="hint">Radio accepted ≠ delivered. A matching direct ACK is evidence of acknowledgment; a channel echo is not proof any particular recipient received or read a message.</p>
+   <h3>Outbound timeline · most recent 30</h3><div id="diag-transmissions" class="diag-transmissions" aria-live="polite"></div>
+  </div>
+ </details>
+ <details class="panel monitor-section"><summary><span><b>Advanced Diagnostics</b><small>Radio configuration, routing state, received event log and raw telemetry</small></span><span class="monitor-chevron" aria-hidden="true">⌄</span></summary>
+  <div class="monitor-section-body"><h3>Radio and routing readback</h3><div id="diag-settings" class="health-details"></div><p class="hint">Region scope may be managed by Station without firmware readback. Use Radio Settings to change hardware configuration.</p>
+   <div class="panel-head monitor-log-head"><h3>RF receive activity log</h3><label class="rx-filter">Show<select id="rx-filter"><option value="">All activity</option><option value="channel">Channel messages</option><option value="direct">Direct messages</option><option value="advert">Advertisements</option><option value="rx_log">RF log data</option><option value="counter_delta">Packet counter changes</option><option value="counter_reset">Counter resets</option></select></label></div>
+   <p class="hint">Decoded events appear only when provided by the firmware; counter deltas do not represent individual packet receptions. Channel secrets and raw packet contents are not stored here.</p><div id="health-rx-log" class="rx-log" aria-live="polite"></div>
+   <details class="monitor-raw"><summary>Raw telemetry and collector status (JSON)</summary><pre id="telemetry-info" class="text-block"></pre></details>
+  </div>
+ </details>
 </section>
 <section id="view-my-node" class="view" hidden>
  <div class="panel-head"><div><span class="eyebrow">STATION IDENTITY</span><h2>My Node &amp; Advertisements</h2><p class="hint">Private saved coordinates are separate from coordinates broadcast over the mesh. All radio actions use the existing command queue.</p></div><span class="pill" id="own-radio-name">Local node</span></div>
@@ -131,24 +145,14 @@
   </article>
  </div>
 </section>
-<section id="view-telemetry" class="view" hidden><div class="two-col"><article class="panel" id="battery-panel"><div class="panel-head"><h2>Battery history</h2></div><div id="battery-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Noise floor history</h2></div><div id="noise-chart" class="chart"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Packet counters (RX)</h2></div><div id="rx-chart" class="chart"></div></article><article class="panel"><div class="panel-head"><h2>Last packet RSSI (dBm)</h2></div><div id="rssi-chart" class="chart"></div></article></div><article class="panel"><div class="panel-head"><h2>Detailed statistics</h2></div><div id="telemetry-info" class="text-block"></div></article></section>
+
 <section id="view-map" class="view" hidden>
 <article class="panel"><div class="panel-head"><div><span class="eyebrow">DISCOVERED CONTACTS</span><h2>Node and repeater map</h2></div><button id="map-refresh" class="button secondary">Refresh map</button></div>
 <p class="hint">Only advertised or manually entered coordinates are plotted. Radio signal and contact names are not used to infer locations. Map tiles and library require internet access from your browser.</p>
 <div class="map-actions"><button type="button" class="button secondary" id="map-zoom-in" aria-label="Zoom in">+</button><button type="button" class="button secondary" id="map-zoom-out" aria-label="Zoom out">−</button><button type="button" class="button secondary" id="map-fit">Fit nodes</button></div>
 <div id="map-canvas" class="node-map" role="region" aria-label="Interactive MeshCore node map"><div class="map-tiles" id="map-tiles"></div><div class="map-pins" id="map-pins"></div><div class="map-fallback" id="map-fallback" hidden>Base-map tiles are unavailable. Node positions remain visible on the coordinate grid.</div><div class="map-attribution">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div></div><p id="map-summary" class="hint"></p></article>
 <article class="panel"><div class="panel-head"><h2>Unmapped contacts and location overrides</h2></div><div id="map-unmapped" class="stream"></div><form id="manual-location-form" class="map-location-form"><label>Contact<select id="map-contact" required></select></label><label>Latitude<input id="map-lat" type="number" min="-90" max="90" step="any" required></label><label>Longitude<input id="map-lon" type="number" min="-180" max="180" step="any" required></label><button class="button secondary" type="submit">Save manual location</button><button class="button secondary" type="button" id="map-clear">Clear manual location</button></form><p class="hint">Manual coordinates override advertised values until cleared. Node presence on the map does not mean the radio is currently reachable.</p></article></section>
-<section id="view-diagnostics" class="view" hidden>
-  <div class="panel-head"><div><span class="eyebrow">RADIO DIAGNOSTICS · 0.8.4</span><h2>Traffic, routing &amp; transmission evidence</h2></div>
-    <div class="actions"><label class="rx-filter">Window<select id="diag-window"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label><button class="button secondary" id="diag-refresh" type="button">Refresh diagnostics</button></div></div>
-  <div class="kpis" id="diag-kpis" aria-live="polite"></div>
-  <div class="two-col">
-   <article class="panel"><div class="panel-head"><h2>RX / TX traffic per sample</h2><span class="legend">Counter changes, reset-aware</span></div><div class="diag-bars" id="diag-traffic" aria-label="Radio traffic timeline"></div><p class="hint">A gap marks a radio counter reset or an unavailable sample. Counts are not individual packet timestamps.</p></article>
-   <article class="panel"><div class="panel-head"><h2>Radio and routing state</h2></div><div class="health-details" id="diag-settings"></div><p class="hint">Region scope is Station-managed and may not be readable from the device. Readback status is displayed separately.</p></article>
-  </div>
-  <article class="panel"><div class="panel-head"><div><span class="eyebrow">PER-MESSAGE EVIDENCE</span><h2>Outbound timeline</h2></div><span class="legend">Newest first · most recent 30</span></div><div class="diag-transmissions" id="diag-transmissions" aria-live="polite"></div>
-   <p class="hint">A channel echo is evidence of a matching heard copy, not a delivery receipt. An absent echo is not a failure. Direct ACKs only apply when exact checksum correlation succeeds.</p></article>
-</section>
+
 <section id="view-radio" class="view" hidden><div class="two-col"><article class="panel"><div class="panel-head"><h2>Radio configuration</h2><button id="radio-read" class="button secondary">Read from T114</button></div><pre id="radio-current" class="text-block">Not read yet</pre><p class="hint">Changes are queued to the running collector. Ensure the T114 is the correct 915 MHz hardware variant before changing RF parameters.</p></article><article class="panel"><div class="panel-head"><h2>Update node settings</h2></div><form id="radio-settings-form"><label>Node name<input id="radio-name" maxlength="31" placeholder="MeshCore-Station"></label><label>TX power in dBm (optional)<input id="radio-power" type="number" min="2" max="22" placeholder="Leave empty to keep current"></label><label>Frequency preset<select id="radio-preset"><option value="">Keep existing radio parameters</option><option value="us">USA/Canada 910.525 MHz, BW62.5, SF7, CR5</option></select></label><label>Type APPLY RADIO to confirm<input id="radio-confirm" placeholder="APPLY RADIO" required></label><button class="button primary" type="submit">Apply radio settings</button></form><p class="hint">Messaging channels: <span id="radio-channel-list">Not loaded</span>. Changing channel secrets is intentionally not offered here until secure backup and compatibility checks are implemented.</p></article></div></section>
 <section id="view-channels" class="view" hidden>
  <article class="panel"><div class="panel-head"><div><span class="eyebrow">COMPANION CHANNEL SLOTS</span><h2>Channel management</h2></div><button id="channels-refresh" class="button secondary">Read channels from T114</button></div>
@@ -168,7 +172,7 @@
  <p class="hint">Removing the Public channel (slot 0) requires explicit confirmation too. Back up any private channel keys before deletion.</p></article></div>
 </section>
 <section id="view-routing" class="view" hidden>
- <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.4</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
+ <div class="panel-head"><div><span class="eyebrow">T114 USB COMPANION · 0.8.5</span><h2>Routing &amp; Regions</h2><p class="hint">These are outgoing Companion scope settings, not repeater allow/deny rules. No changes occur until you apply them.</p></div><button id="routing-read" class="button secondary" type="button">Read path hash from T114</button></div>
  <div class="two-col">
   <article class="panel"><h2>Path hash</h2><p class="hint">Longer paths help identify repeaters, but older repeaters may drop 2- and 3-byte hash packets.</p>
    <p id="routing-current-hash" class="hint">Current hardware mode: not read</p>
@@ -252,4 +256,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=084"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=085"></script></body></html>

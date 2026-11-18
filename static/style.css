@@ -214,3 +214,41 @@ main{flex:1;min-width:0}.topbar{padding:27px 36px 25px;border-bottom:1px solid v
 .advert-card h3{margin:0}.advert-card p{margin:0;color:var(--muted);font-size:.8rem;flex:1;line-height:1.6}.advert-card small{color:#aec5d1}
 .map-pin.self{background:#42d7bf;color:#05212c;border-color:white;border-radius:12px}.node-tag.self{background:#143e3a;color:#7afbe8}
 @media(max-width:800px){.node-advert-modes{grid-template-columns:1fr}.trends-grid{grid-template-columns:1fr}.node-action-grid .button{flex-basis:100%}}
+
+/* 0.8.5 Radio Monitor: one page, one window control, expandable nonredundant diagnostics. */
+.monitor-view{display:grid;gap:16px;align-content:start}
+.monitor-heading{align-items:center;margin-bottom:0;gap:15px;flex-wrap:wrap}
+.monitor-heading h2{font-size:1.35rem;margin:4px 0 2px}
+.monitor-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.monitor-kpis .kpi{min-width:0;margin:0}
+.monitor-kpis .kpi b{overflow-wrap:anywhere}
+.monitor-primary{margin:0}
+.monitor-section{padding:0;margin:0;overflow:hidden}
+.monitor-section>summary{display:flex;justify-content:space-between;align-items:center;gap:14px;list-style:none;cursor:pointer;padding:18px 22px;min-height:65px}
+.monitor-section>summary::-webkit-details-marker{display:none}
+.monitor-section>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.monitor-section>summary b{font-size:1rem}
+.monitor-section>summary small{display:block;color:var(--muted);font-size:.76rem;line-height:1.5;margin-top:3px}
+.monitor-section .monitor-chevron{color:var(--accent);font-size:1.4rem;transform:rotate(0);transition:transform .15s}
+.monitor-section[open] .monitor-chevron{transform:rotate(180deg)}
+.monitor-section-body{padding:6px 22px 22px;border-top:1px solid var(--border)}
+.monitor-section-body .two-col{margin-top:4px}
+.monitor-section-body h3{margin-top:16px}
+.monitor-section-body .hint{margin-top:12px}
+.monitor-counter-detail,.monitor-signal-readings{margin:12px 0}
+.monitor-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.monitor-counts>div{display:grid;gap:6px;border:1px solid var(--border);border-radius:9px;background:#0c1821;padding:12px}
+.monitor-counts span{font-size:.75rem;color:var(--muted)}
+.monitor-counts b{font-variant-numeric:tabular-nums;font-size:1.25rem}
+.monitor-log-head{margin:20px 0 10px;flex-wrap:wrap}
+.monitor-raw{margin-top:22px;border-top:1px solid var(--border);padding-top:16px}
+.monitor-raw>summary{cursor:pointer;color:var(--accent);font-size:.86rem}
+.monitor-raw pre{max-height:400px;overflow:auto;margin-top:14px}
+@media(max-width:1020px){.monitor-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.monitor-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.monitor-heading .actions{width:100%;justify-content:space-between}.monitor-kpis{gap:8px}.monitor-kpis .kpi{padding:14px 12px}.monitor-section>summary{padding:15px}.monitor-section-body{padding:4px 15px 18px}.monitor-counts b{font-size:1rem}.monitor-section>summary small{font-size:.7rem}}
+/* Keep SVG legend, plot and time axis in normal flow (not overlapping grid cells). */
+.monitor-view .chart{display:flex;flex-direction:column;align-items:stretch;justify-content:center;height:auto;min-height:190px;gap:8px}
+.monitor-view .chart svg{display:block;width:100%;height:auto;max-height:260px;overflow:visible}
+.monitor-view .trend-legend{min-height:20px}
+.monitor-view .trend-axis{margin-top:2px}
+.monitor-view .monitor-primary .hint{margin-top:10px}

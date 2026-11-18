@@ -17,7 +17,7 @@ async function request(path, opt={}){
 }
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
-function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',telemetry:'Telemetry',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',health:'Radio Health',diagnostics:'Radio Diagnostics',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions','my-node':'My Node & Adverts'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();if(view==='diagnostics')refreshDiagnostics().catch(e=>toast(e.message,true));}
+function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',monitor:'Radio Monitor',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions','my-node':'My Node & Adverts'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();}
 function empty(text){return `<div class="empty">${H(text)}</div>`}
 function nodeStyle(role){
   const roleKey=String(role||'unknown').toLowerCase().replaceAll(' ','_');
@@ -37,8 +37,7 @@ function renderTxDiagnostics(){
  const t=S.txDiag;if(!t)return;
  const x=$('tx-confirmation-stats');if(!x)return;
  x.innerHTML=[['Radio accepted',t.accepted],['Direct ACKs',t.direct_acknowledged],['Channel echoes',t.channel_echo_observed],['Unconfirmed',t.unconfirmed]].map(([a,b])=>`<div class="tx-stat"><span>${H(a)}</span><b>${Number(b)||0}</b></div>`).join('');
- const list=S.messages.filter(m=>m.direction==='out').slice(0,12);
- $('tx-confirmation-list').innerHTML=list.length?list.map(m=>item(messageHeading(m),`${short(m.text,75)} · ${txLabel(m)}`,m.ts,'out')).join(''):empty('No outbound messages yet');
+
 }
 
 function messageHeading(m){const node=(m.direction==='out')?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'Local node'):(m.sender||'Unknown');return `${m.kind==='channel'?'#'+m.target:'Direct'} · ${m.direction==='in'?'Received':'Sent'} · ${node}`}
@@ -71,7 +70,7 @@ function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  $('all-alerts').innerHTML=S.alerts.length?S.alerts.map(a=>`<div class="stream-item"><span class="dot ${a.resolved?'':'danger'}"></span><div class="stream-main"><div class="stream-head"><b>${H(a.severity.toUpperCase())}</b><span class="stream-time">${H(dt(a.ts))}</span></div><p class="stream-body">${H(a.message)}</p></div>${a.resolved?'<span class="pill">Resolved</span>':`<button class="button secondary" data-resolve="${a.id}">Resolve</button>`}</div>`).join(''):empty('No alerts');
  $('event-list').innerHTML=S.events.length?S.events.map(e=>item(e.kind,JSON.stringify(e.detail),e.ts)).join(''):empty('No radio events');
  $('telemetry-info').textContent=JSON.stringify({radio,latest:st.sample,known_contacts:st.counts.contacts,logged_messages:st.counts.messages,raw_radio_stats:st.last_stats},null,2);
- plot('overview-chart',S.history,'noise','dBm');plot('noise-chart',S.history,'noise','dBm');if(st.power_source!=='usb')plot('battery-chart',S.history,'battery','%');plot('rx-chart',S.history,'packets_rx','packets');plot('rssi-chart',S.history,'rssi','dBm');
+ plot('overview-chart',S.history,'noise','dBm');if(st.power_source!=='usb')plot('battery-chart',S.history,'battery','%');
  $('firmware-jobs').innerHTML=S.jobs.length?S.jobs.map(j=>`<div class="stream-item"><span class="dot ${['failed','error'].includes(j.status)?'danger':j.status==='complete'?'':'warn'}"></span><div class="stream-main"><div class="stream-title">${H(j.filename||j.id)}</div><div class="stream-body">${H(j.status)} · ${H(j.message||'')}</div></div><button class="subtle" data-job="${H(j.id)}">Logs</button></div>`).join(''):empty('No firmware updates yet');
  $('radio-channel-list').textContent=(st.channels||[]).map(c=>`${c.index}: ${c.name||'(empty)'}`).join(' · ')||'No channel information';$('last-refresh').textContent='Refreshed '+new Date().toLocaleTimeString();fillDestinations();fillArchiveDestinations();
 }
@@ -176,12 +175,12 @@ $('radio-settings-form').addEventListener('submit',async e=>{e.preventDefault();
 // Hardware radio health: no inferred battery percentage or fabricated RX progress.
 function renderHealth(){const h=S.health;if(!h)return;
  const d=h.measurements||{};const show=v=>typeof v==='number'?Number(v).toLocaleString():'—';
+ $('monitor-connection').textContent=h.connected?'Online':'Offline';
  $('health-rx').textContent=show(d.rx);$('health-tx').textContent=show(d.tx);$('health-errors').textContent=show(d.rx_errors);
+ $('monitor-signal-details').innerHTML=[['Last RSSI',d.rssi==null?'Unavailable':show(d.rssi)+' dBm'],['Noise floor',d.noise_floor==null?'Unavailable':show(d.noise_floor)+' dBm'],['SNR',d.snr==null?'Unavailable':show(d.snr)+' dB']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
  $('health-age').textContent=typeof h.sample_age_secs==='number'?`${h.sample_age_secs}s`:'—';
  $('health-freshness').textContent=h.sample_fresh?'Recent telemetry':'Telemetry delayed/stale';
- $('health-details').innerHTML=[['Collector',h.connected?'Connected':'Disconnected'],['Power','USB (no battery)'],['Radio uptime',show(d.uptime_secs)+' s'],['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['Flood TX',show(d.flood_tx)],['Direct TX',show(d.direct_tx)],['RX airtime',show(d.rx_air_secs)+' s'],['TX airtime',show(d.tx_air_secs)+' s'],['Noise floor',show(d.noise_floor)+' dBm'],['Last RSSI',show(d.rssi)+' dBm'],['Receive errors',show(d.rx_errors)],['New RX since last sample',show(h.deltas?.rx)],['New RX errors since last sample',show(h.deltas?.rx_errors)]].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
- $('health-tx-note').textContent='Flood TX: '+show(d.flood_tx)+' · Direct TX: '+show(d.direct_tx)+' · Counts only; other stations have not been confirmed to hear these transmissions.';
-  plot('health-rx-chart',S.history,'packets_rx','packets');plot('health-tx-chart',S.history,'packets_tx','packets');plot('health-error-chart',S.history,'rx_errors','errors');
+ $('health-details').innerHTML=[['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['Flood TX',show(d.flood_tx)],['Direct TX',show(d.direct_tx)],['RX airtime',d.rx_air_secs==null?'Unavailable':show(d.rx_air_secs)+' s'],['TX airtime',d.tx_air_secs==null?'Unavailable':show(d.tx_air_secs)+' s']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
 }
 function renderChannels(){const slots=S.channels?.slots||[];
  $('channels-table').innerHTML=slots.map(c=>`<tr><td>#${c.index}</td><td>${H(c.name||'—')}</td><td>${c.configured?'Configured':'Empty'}</td><td><button class="subtle" type="button" data-edit-channel="${c.index}">Edit</button></td></tr>`).join('');
@@ -398,44 +397,23 @@ function diagKpi(title,value,subtitle){return `<article class="kpi"><span class=
 function diagDetail(name,value){return `<div class="health-detail"><span>${H(name)}</span><b>${H(value)}</b></div>`}
 function renderRadioDiagnostics(){
  const d=D08.data;if(!d)return;
- const t=d.traffic||{},total=t.totals||{},latest=t.latest||{},route=d.routing||{};
- $('diag-kpis').innerHTML=[
-   diagKpi('COLLECTOR',d.collector_online?'Online':'Offline / stale',d.heartbeat_age_secs==null?'No heartbeat':`${d.heartbeat_age_secs}s heartbeat age`),
-   diagKpi('RECEIVED',diagNumber(total.rx),`Observed changes / ${d.window_hours}h`),
-   diagKpi('TRANSMITTED',diagNumber(total.tx),`Observed changes / ${d.window_hours}h`),
-   diagKpi('RX ERRORS',diagNumber(total.rx_errors),`${t.resets||0} reset intervals excluded`)
- ].join('');
- const policy=route.managed_policy||{};
+ const route=d.routing||{},policy=route.managed_policy||{};
  $('diag-settings').innerHTML=[
-  ['Current noise',latest.noise_floor==null?'Unavailable':`${latest.noise_floor} dBm`],
-  ['Last RSSI',latest.rssi==null?'Unavailable':`${latest.rssi} dBm`],
   ['TX power',d.radio_config?.tx_power==null?'Unknown':`${d.radio_config.tx_power} dBm`],
   ['Path hash',route.observed?.path_hash_bytes==null?'Not read':`${route.observed.path_hash_bytes} bytes`],
   ['Default region',!policy.scope_configured?'Not Station-managed':(policy.default_scope||'Unscoped')],
-  ['Contact sync',d.contact_sync?.sync_at||'No recent sync'],
-  ['Telemetry age',t.latest_age_secs==null?'Unavailable':`${t.latest_age_secs}s`],
-  ['Packets RX (since reboot)',diagNumber(latest.rx)],
-  ['Packets TX (since reboot)',diagNumber(latest.tx)]
+  ['Last contact sync',d.contact_sync?.sync_at?dt(d.contact_sync.sync_at):'No recent sync']
  ].map(([a,b])=>diagDetail(a,b)).join('');
- const intervals=(t.intervals||[]).slice(-40);
- const max=Math.max(1,...intervals.filter(x=>!x.reset).flatMap(x=>[x.counts.rx||0,x.counts.tx||0]));
- $('diag-traffic').innerHTML=intervals.length?intervals.map(x=>x.reset?'<div class="diag-column reset" title="Radio counter reset" aria-label="Reset interval">↻</div>':
-  `<div class="diag-column" title="${H(x.ts)} · RX ${diagNumber(x.counts.rx)} · TX ${diagNumber(x.counts.tx)}"><div class="diag-bar rx" style="height:${Math.round(100*(x.counts.rx||0)/max)}%"></div><div class="diag-bar tx" style="height:${Math.round(100*(x.counts.tx||0)/max)}%"></div></div>`).join(''):empty('Not enough telemetry samples yet');
  $('diag-transmissions').innerHTML=(d.transmissions||[]).length?d.transmissions.map(m=>{
- const proof=(m.evidence||[]).map(p=>`<li><time>${H(dt(p.ts))}</time><span>${H(p.label)}</span></li>`).join('');
- return `<details class="diag-message"><summary><span><b>${H(m.sender||'Local node')}</b> · ${H(m.kind==='channel'?'Channel '+m.destination:'Direct message')}<small>${H(m.text_preview)}</small></span><time>${H(dt(m.ts))}</time></summary><ol>${proof||'<li>No matching radio evidence recorded</li>'}</ol></details>`;
+  const proof=(m.evidence||[]).map(p=>`<li><time>${H(dt(p.ts))}</time><span>${H(p.label)}</span></li>`).join('');
+  return `<details class="diag-message"><summary><span><b>${H(m.sender||'Local node')}</b> · ${H(m.kind==='channel'?'Channel '+m.destination:'Direct message')}<small>${H(m.text_preview)}</small></span><time>${H(dt(m.ts))}</time></summary><ol>${proof||'<li>No matching radio evidence recorded</li>'}</ol></details>`;
  }).join(''):empty('No outbound messages logged');
 }
-async function refreshDiagnostics(){
+async function refreshDiagnostics(hours){
  if(!S.csrf)return;
- D08.data=await request(`/api/radio/diagnostics?hours=${Number($('diag-window').value)||24}`);
+ D08.data=await request(`/api/radio/diagnostics?hours=${Number(hours)||24}`);
  renderRadioDiagnostics();
 }
-$('diag-window').addEventListener('change',()=>refreshDiagnostics().catch(e=>toast(e.message,true)));
-$('diag-refresh').addEventListener('click',()=>refreshDiagnostics().catch(e=>toast(e.message,true)));
-// Refresh the diagnostics only when its page is visible; no extra USB polling.
-const oldRefresh08=refresh;
-refresh=async function(){await oldRefresh08();if(S.page==='diagnostics')await refreshDiagnostics().catch(e=>toast(e.message,true));};
 
 // 0.8.1 — Message archive: server-side filters and timestamp/id cursor pagination.
 // This is separate from the short recent-message list on Overview.
@@ -638,6 +616,7 @@ function trendSvg084(id,points,keys,colors,unit){
 }
 function renderTrends084(){const d=TR084.data;if(!d)return;const p=d.points||[],last=[...p].reverse().find(x=>x.rx_per_min!==null||x.tx_per_min!==null)||{};
  $('trend-rx').textContent=trendFmt084(last.rx_per_min);$('trend-tx').textContent=trendFmt084(last.tx_per_min);
+ $('monitor-error-rate').textContent=trendFmt084([...p].reverse().find(x=>x.errors_per_min!==null&&x.errors_per_min!==undefined)?.errors_per_min);
  $('trend-resets').textContent=String(d.reset_count??0);$('trend-uptime').textContent=d.latest?.uptime_secs!=null?Math.round(d.latest.uptime_secs).toLocaleString()+' s':'—';
  trendSvg084('trend-traffic',p,['rx_per_min','tx_per_min'],['#42d7bf','#f0ac52'],'packets/min');
  trendSvg084('trend-paths',p,['flood_rx_per_min','direct_rx_per_min','flood_tx_per_min','direct_tx_per_min'],['#42d7bf','#75b9e8','#ffb356','#b7a1fc'],'packets/min');
@@ -647,9 +626,7 @@ function renderTrends084(){const d=TR084.data;if(!d)return;const p=d.points||[],
  trendSvg084('trend-uptime-chart',p,['uptime_secs'],['#f0ac52'],'seconds');
  $('trend-reset-list').innerHTML=d.resets?.length?d.resets.slice(-8).reverse().map(x=>`<div class="radio-reset">↻ ${H(dt(x.ts))} · ${H(x.reason)}</div>`).join(''):'No uptime or counter reset detected in this time window.';
 }
-async function refreshTrends084(){if(!S.csrf)return;TR084.data=await request('/api/radio/trends?hours='+Number($('trends-window').value||24));renderTrends084()}
-$('trends-window').addEventListener('change',()=>refreshTrends084().catch(e=>toast(e.message,true)));
-$('trends-reload').addEventListener('click',()=>refreshTrends084().catch(e=>toast(e.message,true)));
+async function refreshTrends084(hours){if(!S.csrf)return;TR084.data=await request('/api/radio/trends?hours='+Number(hours||24));renderTrends084()}
 function renderOwn084(){const own=TR084.location,ad=TR084.adverts;if(own){$('own-radio-name').textContent=own.node_name||'My node';
  const saved=own.private||{},observed=own.radio||{},fields=observed.readback||{};
  $('own-location-status').innerHTML=[['Private map location',saved.latitude!=null?`${Number(saved.latitude).toFixed(5)}, ${Number(saved.longitude).toFixed(5)}`:'Not saved'],['T114 policy readback',observed.policy_verified?(String(fields.adv_loc_policy??fields.advert_loc_policy)==='1'?'Location included':'Location hidden'):'Unavailable / unknown'],['Last radio action',observed.last_write_mode||'None from this interface']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
@@ -671,8 +648,31 @@ async function sendAdvert084(flood){const confirmText=flood?'FLOOD ADVERT':'LOCA
  try{const x=await request('/api/node/adverts',{method:'POST',body:JSON.stringify({flood,confirm:typed})});toast('Advertisement queued #'+x.id);await pollCommand(x.id);toast('Radio accepted advertisement; delivery unconfirmed');await refreshOwn084()}catch(err){toast(err.message,true)}}
 $('advert-local').addEventListener('click',()=>sendAdvert084(false));$('advert-flood').addEventListener('click',()=>sendAdvert084(true));
 $('advert-refresh').addEventListener('click',()=>refreshOwn084().catch(e=>toast(e.message,true)));
-// Lazy-refresh only the visible page. Preserve form edits during periodic refreshes.
-const navigateBefore084=navigate;
-navigate=function(view){navigateBefore084(view);if(view==='health')refreshTrends084().catch(e=>toast(e.message,true));if(view==='my-node')refreshOwn084(true).catch(e=>toast(e.message,true));};
-const refreshBefore084=refresh;
-refresh=async function(){await refreshBefore084();if(S.page==='health')await refreshTrends084().catch(e=>toast(e.message,true));if(S.page==='my-node')await refreshOwn084(false).catch(e=>toast(e.message,true));};
+// 0.8.5: one monitoring page and one history selector; all reads use existing API endpoints.
+const MON085={generation:0};
+async function refreshMonitor085(){
+ if(!S.csrf || S.page!=='monitor')return;
+ const generation=++MON085.generation, hours=Number($('monitor-window').value)||24;
+ const [trends,diagnostics]=await Promise.all([
+  request('/api/radio/trends?hours='+hours),
+  request('/api/radio/diagnostics?hours='+hours)
+ ]);
+ if(generation!==MON085.generation || S.page!=='monitor' || hours!==Number($('monitor-window').value))return;
+ TR084.data=trends;D08.data=diagnostics;renderTrends084();renderRadioDiagnostics();
+}
+$('monitor-window').addEventListener('change',()=>refreshMonitor085().catch(e=>toast(e.message,true)));
+$('monitor-refresh').addEventListener('click',()=>refreshMonitor085().catch(e=>toast(e.message,true)));
+// Only fetch additional diagnostics while their combined page is visible.
+const navigateBefore085=navigate;
+navigate=function(view){
+ if(['health','diagnostics','telemetry'].includes(view))view='monitor';
+ navigateBefore085(view);
+ if(view==='monitor')refreshMonitor085().catch(e=>toast(e.message,true));
+ if(view==='my-node')refreshOwn084(true).catch(e=>toast(e.message,true));
+};
+const refreshBefore085=refresh;
+refresh=async function(){
+ await refreshBefore085();
+ if(S.page==='monitor')await refreshMonitor085().catch(e=>toast(e.message,true));
+ if(S.page==='my-node')await refreshOwn084(false).catch(e=>toast(e.message,true));
+};
