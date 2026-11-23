@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const S = {csrf:null, page:'overview', contacts:[], messages:[], events:[], alerts:[], history:[], jobs:[], mapNodes:[], health:null, channels:{slots:[]}, addressBook:[], rxLog:[], routing:null, routingCatalog:null, txDiag:null, radioDiag:null, status:null};
 const H = (v) => String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const dt = (v) => v ? new Date(v).toLocaleString() : '—';
+const dt = (v) => {const d=v?new Date(v):null;return d&&!Number.isNaN(d.getTime())?d.toLocaleString():'—'};
 const short = (v,n=18) => String(v||'').length>n ? String(v).slice(0,n)+'…' : String(v||'');
 function toast(s, error=false){let t=$('toast');t.textContent=s;t.className='toast show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.className='toast',5000)}
 async function request(path, opt={}){
@@ -56,10 +56,18 @@ function fillDestinations(){let old=$('destination').value;const channels=(S.sta
 function fillArchiveDestinations(){
  const select=$('history-destination');if(!select)return;
  const previous=select.value;
- const labels=new Map((S.status?.channels||[]).map(c=>[Number(c.index),c.name]));
- const channels=Array.from({length:8},(_,i)=>({index:i,name:labels.get(i)||'Channel '+i}));
- select.innerHTML='<option value="all">All conversations</option><option value="direct">Direct messages</option>'+channels.map(c=>`<option value="channel:${c.index}">${H(c.name||'Channel '+c.index)} (#${c.index})</option>`).join('');
- if([...select.options].some(x=>x.value===previous))select.value=previous;
+ const options=['<option value="all">All channels and DMs</option>',
+                '<option value="direct">Direct messages only</option>'];
+ for(let index=0;index<8;index++){
+  options.push(`<option value="channel:${index}">${H(channelName086(index))} (#${index})</option>`);
+ }
+ // Avoid replacing the dropdown during every 10-second status refresh; doing so
+ // can reset focus, the selected channel, or an open native select on mobile.
+ const markup=options.join('');
+ if(select.innerHTML!==markup){
+  select.innerHTML=markup;
+  if([...select.options].some(o=>o.value===previous))select.value=previous;
+ }
 }
 function render(){if(!$('shell') || $('shell').hidden || !S.status)return;
  const st=S.status, radio=st.radio||{};$('mode-badge').textContent='USB SERIAL';$('mode-badge').className='pill';$('connection-badge').textContent=radio.connected?'● Connected':'● Offline';$('connection-badge').className='pill '+(radio.connected?'':'red');$('kpi-radio').textContent=radio.connected?'Online':'Offline';$('kpi-device').textContent=radio.error||radio.device||'Awaiting device';$('kpi-nodes').textContent=st.counts.contacts;const sync=st.contact_sync||{};const syncText=typeof sync.radio_contacts==='number'?`${sync.radio_contacts} on radio · +${sync.new_in_sync||0} new at last sync`:'Awaiting radio contact sync';$('nodes-kpi-detail').textContent=syncText;$('contact-sync-summary').textContent=`${syncText}${sync.sync_at?' · '+dt(sync.sync_at):''}. RX packets do not increase this count automatically.`;$('kpi-messages').textContent=st.counts.messages;$('power-title').textContent=st.power_source==='usb'?'POWER SOURCE':'BATTERY';$('kpi-battery').textContent=st.power_source==='usb'?'USB Powered':(st.sample?.battery_pct!=null ? st.sample.battery_pct.toFixed(0)+'%' : '—');$('kpi-battery').style.fontSize=st.power_source==='usb'?'1.35rem':'';$('power-caption').textContent=st.power_source==='usb'?'No battery installed':'Most recent telemetry';$('battery-panel').hidden=st.power_source==='usb';
@@ -417,14 +425,30 @@ async function refreshDiagnostics(hours){
 
 // 0.8.1 — Message archive: server-side filters and timestamp/id cursor pagination.
 // This is separate from the short recent-message list on Overview.
-const M081={items:[],total:0,cursor:null,loading:false,seq:0,signature:'',started:false};
+const HISTORY_SORT_LABELS088={newest:'newest first',oldest:'oldest first',channel_asc:'channel 0 → 7',channel_desc:'channel 7 → 0'};
+const M081={items:[],total:0,cursor:null,loading:false,seq:0,signature:'',started:false,loadedMore:false};
+function archiveChannelBucket088(m,descending=false){
+ if(m.kind==='channel'&&/^[0-7]$/.test(String(m.target)))return Number(m.target);
+ return descending?-1:8; // Direct/unknown items after all numbered channels.
+}
+function archiveCompare088(a,b,sort){
+ if(sort.startsWith('channel_')){
+  const descending=sort==='channel_desc';
+  const channelDiff=archiveChannelBucket088(a,descending)-archiveChannelBucket088(b,descending);
+  if(channelDiff)return descending?-channelDiff:channelDiff;
+ }
+ const timeDiff=new Date(a.ts).getTime()-new Date(b.ts).getTime();
+ const diff=timeDiff||Number(a.id)-Number(b.id);
+ return sort==='oldest'?diff:-diff;
+}
+
 function messageFilters081(){return {
  q:$('history-search').value.trim(), direction:$('history-direction').value,
- destination:$('history-destination').value
+ destination:$('history-destination').value, sort:$('history-sort').value
 };}
 function messageQuery081(filters,cursor){
  const qs=new URLSearchParams({limit:'50',...filters});
- if(cursor){qs.set('before_ts',cursor.before_ts);qs.set('before_id',String(cursor.before_id));}
+ if(cursor){qs.set('before_ts',cursor.before_ts);qs.set('before_id',String(cursor.before_id));if(cursor.before_channel!==undefined)qs.set('before_channel',String(cursor.before_channel));}
  return '/api/messages/history?'+qs.toString();
 }
 function compactTimestamp082(value){
@@ -458,8 +482,8 @@ function channelNameSignature086(){
 function messageArchiveEntry081(m){
  const outgoing=m.direction==='out';
  const isChannel=m.kind==='channel';
- const channelName=isChannel?channelName086(m.target):'';
  const originalSender=outgoing?(m.sender&&m.sender!=='local'?m.sender:S.status?.radio_config?.name||'My station'):(m.sender||'Unknown sender');
+ const channelName=isChannel?channelName086(m.target):'';
  // Companion firmware may store the literal "channel" as the incoming sender.
  // Show the actual channel name in the row, without implying it is the sender's identity.
  const genericChannelSender=!outgoing&&isChannel&&/^(channel|unknown(?: sender)?)$/i.test(String(m.sender||'').trim());
@@ -499,7 +523,7 @@ function renderMessageArchive081(){
  const el=$('all-messages');
  el.innerHTML=M081.items.length?M081.items.map(messageArchiveEntry081).join(''):empty('No messages match these filters.');
  el.querySelectorAll('[data-message-id]').forEach(n=>{if(open.has(n.dataset.messageId))n.open=true;});
- $('history-summary').textContent=`Showing ${M081.items.length.toLocaleString()} of ${M081.total.toLocaleString()} matching messages · newest first`;
+ $('history-summary').textContent=`Showing ${M081.items.length.toLocaleString()} of ${M081.total.toLocaleString()} matching messages · ${HISTORY_SORT_LABELS088[$('history-sort').value]||'newest first'}`;
  $('history-more').hidden=!M081.cursor;
  $('history-more').disabled=M081.loading;
 }
@@ -510,7 +534,7 @@ async function reloadMessageHistory(){
  $('history-summary').textContent='Loading message history…';$('history-more').disabled=true;
  try{
   const data=await request(messageQuery081(filters));if(seq!==M081.seq)return;
-  M081.items=data.items;M081.total=data.total;M081.cursor=data.next_cursor;M081.started=true;
+  M081.items=data.items;M081.total=data.total;M081.cursor=data.next_cursor;M081.started=true;M081.loadedMore=false;
   renderMessageArchive081();
  }catch(e){if(seq===M081.seq){$('history-summary').textContent='History unavailable: '+e.message;toast(e.message,true);}}
  finally{if(seq===M081.seq){M081.loading=false;$('history-more').disabled=false;}}
@@ -522,9 +546,9 @@ async function loadOlderMessages081(){
  try{
   const page=await request(messageQuery081(filters,M081.cursor));if(seq!==M081.seq)return;
   const ids=new Set(M081.items.map(m=>m.id));for(const m of page.items)if(!ids.has(m.id)){M081.items.push(m);ids.add(m.id);}
-  M081.total=page.total;M081.cursor=page.next_cursor;renderMessageArchive081();
- }catch(e){toast('Could not load older messages: '+e.message,true);}
- finally{M081.loading=false;$('history-more').disabled=false;}
+  M081.total=page.total;M081.cursor=page.next_cursor;M081.loadedMore=true;renderMessageArchive081();
+ }catch(e){if(seq===M081.seq)toast('Could not load older messages: '+e.message,true);}
+ finally{if(seq===M081.seq){M081.loading=false;$('history-more').disabled=false;}}
 }
 async function refreshMessageHistoryTop081(){
  if(S.page!=='messages'||!M081.started||M081.loading)return;
@@ -532,18 +556,22 @@ async function refreshMessageHistoryTop081(){
  const seq=M081.seq;
  try{
   const data=await request(messageQuery081(filters));if(seq!==M081.seq)return;
-  const merged=new Map(M081.items.map(m=>[m.id,m]));for(const m of data.items)merged.set(m.id,m);
-  const rows=[...merged.values()].sort((a,b)=>new Date(b.ts)-new Date(a.ts)||b.id-a.id);
+  let rows;
+  if(M081.loadedMore){
+   const merged=new Map(M081.items.map(m=>[m.id,m]));
+   for(const m of data.items)merged.set(m.id,m);
+   rows=[...merged.values()].sort((a,b)=>archiveCompare088(a,b,filters.sort));
+  }else rows=data.items;
   const changed=JSON.stringify(rows)!==JSON.stringify(M081.items)||M081.total!==data.total;
   M081.items=rows;M081.total=data.total;
-  if(!M081.cursor)M081.cursor=data.next_cursor;
+  if(!M081.loadedMore)M081.cursor=data.next_cursor;
   if(changed)renderMessageArchive081();
- }catch(e){/* Existing history remains visible through a transient refresh failure. */}
+ }catch(e){/* Keep history visible if the network briefly disconnects. */}
 }
 let historySearchTimer081=null;
 $('history-search').addEventListener('input',()=>{clearTimeout(historySearchTimer081);historySearchTimer081=setTimeout(reloadMessageHistory,300)});
-for(const field of ['history-direction','history-destination'])$(field).addEventListener('change',reloadMessageHistory);
-$('history-clear').addEventListener('click',()=>{$('history-search').value='';$('history-direction').value='all';$('history-destination').value='all';reloadMessageHistory();});
+for(const field of ['history-direction','history-destination','history-sort'])$(field).addEventListener('change',reloadMessageHistory);
+$('history-clear').addEventListener('click',()=>{$('history-search').value='';$('history-direction').value='all';$('history-destination').value='all';$('history-sort').value='newest';reloadMessageHistory();});
 $('history-refresh').addEventListener('click',reloadMessageHistory);
 $('history-more').addEventListener('click',loadOlderMessages081);
 // Keep the archive fresh while the Messages page is open, without reloading older pages.

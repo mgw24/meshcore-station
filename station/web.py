@@ -11,6 +11,7 @@ import time
 import uuid
 import zipfile
 from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from prometheus_client import CollectorRegistry, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 from station.config import (USERNAME, HASH_SALT, PASSWORD_HASH, SESSION_SECRET,
                             COOKIE_SECURE, SPOOL_DIR, RADIO_POWER_SOURCE)
 from station.geo import advertised_location, contact_role
@@ -39,17 +40,21 @@ from typing import Literal
 if not (HASH_SALT and PASSWORD_HASH and SESSION_SECRET and len(SESSION_SECRET) >= 32):
     raise RuntimeError('Run scripts/configure.sh first; authentication secrets are missing')
 
-app = FastAPI(title='MeshCore Station 0.8.7', docs_url=None, redoc_url=None, openapi_url=None)
+@asynccontextmanager
+async def station_lifespan(_app: FastAPI):
+    # Use the supported FastAPI lifespan hook, preserving the old startup work.
+    initialize()
+    for name in ('jobs', 'packages', 'states', 'logs'):
+        (SPOOL_DIR / name).mkdir(parents=True, exist_ok=True)
+    yield
+
+
+app = FastAPI(title='MeshCore Station 0.8.8', docs_url=None, redoc_url=None,
+              openapi_url=None, lifespan=station_lifespan)
 BASE = Path(__file__).resolve().parent.parent
 app.mount('/assets', StaticFiles(directory=BASE / 'static'), name='assets')
 signer = URLSafeTimedSerializer(SESSION_SECRET, salt='meshcore-station-auth')
 login_failures = {}
-
-@app.on_event('startup')
-def startup():
-    initialize()
-    for name in ('jobs', 'packages', 'states', 'logs'):
-        (SPOOL_DIR / name).mkdir(parents=True, exist_ok=True)
 
 @app.get('/')
 def index(): return FileResponse(BASE / 'static' / 'index.html')
@@ -135,7 +140,7 @@ def status(session=Depends(user_session)):
 
 @app.get('/api/version')
 def version(session=Depends(user_session)):
-    return {'version': '0.8.7', 'release': 'Consistent overview channel names'}
+    return {'version': '0.8.8', 'release': 'Consistent overview channel names'}
 
 @app.get('/api/radio/diagnostics')
 def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
@@ -170,7 +175,7 @@ def radio_diagnostics(hours: int = 24, session=Depends(user_session)):
     def val(key):
         row = status_rows.get(key)
         return (row.value or {}) if row else {}
-    return {'version': '0.8.7', 'window_hours': hours,
+    return {'version': '0.8.8', 'window_hours': hours,
             'collector_online': bool(age is not None and age < 35 and reported.get('connected')),
             'heartbeat_age_secs': age, 'traffic': sample_window(samples, now),
             'routing': {'observed': val('routing_observed'),
@@ -220,12 +225,22 @@ def messages(limit: int = 200, session=Depends(user_session)):
         return serialize_messages(db, rows)
 
 
+# Slots 0–7 sort numerically; direct and unknown targets stay in a separate bucket.
+# The bucket is part of the keyset cursor, so "load older" works across channels.
+HISTORY_CHANNEL_SLOTS = tuple(str(n) for n in range(8))
+HISTORY_SORTS = Literal['newest', 'oldest', 'channel_asc', 'channel_desc']
+
+
 @app.get('/api/messages/history')
 def message_history(limit: int = 50, direction: Literal['all', 'in', 'out'] = 'all',
-                    destination: str = 'all', q: str = '',
+                    destination: str = 'all', q: str = '', sort: HISTORY_SORTS = 'newest',
                     before_ts: datetime | None = None, before_id: int | None = None,
-                    session=Depends(user_session)):
-    """Server-side searchable archive with keyset pagination (stable when new messages arrive)."""
+                    before_channel: str | None = None, session=Depends(user_session)):
+    """Filtered, globally sorted history using stable timestamp/id/channel cursors.
+
+    Channel names remain client-side: the database stores stable slot numbers and
+    the browser resolves current radio names, including after channel renames.
+    """
     if not 1 <= limit <= 100:
         raise HTTPException(400, 'Page size must be between 1 and 100')
     if len(q) > 120:
@@ -234,6 +249,15 @@ def message_history(limit: int = 50, direction: Literal['all', 'in', 'out'] = 'a
         raise HTTPException(400, 'Invalid history cursor')
     if before_ts is not None and before_ts.tzinfo is None:
         raise HTTPException(400, 'History cursor must include a timezone')
+    by_channel = sort.startswith('channel_')
+    terminal_bucket = '8' if sort == 'channel_asc' else '-1'
+    if by_channel:
+        allowed = set(HISTORY_CHANNEL_SLOTS) | {terminal_bucket}
+        if (before_ts is None) != (before_channel is None) or (before_channel is not None and before_channel not in allowed):
+            raise HTTPException(400, 'Invalid channel sort cursor')
+    elif before_channel is not None:
+        raise HTTPException(400, 'Unexpected channel cursor')
+
     filters = []
     if direction != 'all':
         filters.append(Message.direction == direction)
@@ -244,28 +268,47 @@ def message_history(limit: int = 50, direction: Literal['all', 'in', 'out'] = 'a
             raise HTTPException(400, 'Invalid destination filter')
         filters.extend([Message.kind == 'channel', Message.target == destination.split(':')[1]])
     if q.strip():
-        # Escape SQL LIKE wildcards so a literal user search never becomes an unbounded pattern.
+        # Escape SQL LIKE wildcards so text searches cannot turn into patterns.
         term = q.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         pattern = '%' + term + '%'
         filters.append(or_(Message.body.ilike(pattern, escape='\\'),
                            Message.sender.ilike(pattern, escape='\\'),
                            Message.target.ilike(pattern, escape='\\')))
+
+    time_ascending = sort == 'oldest'
+    time_sort = [Message.ts.asc(), Message.id.asc()] if time_ascending else [Message.ts.desc(), Message.id.desc()]
+    bucket = None
+    order = time_sort
+    if by_channel:
+        bucket = case((and_(Message.kind == 'channel', Message.target.in_(HISTORY_CHANNEL_SLOTS)),
+                       Message.target), else_=terminal_bucket)
+        order = [bucket.asc() if sort == 'channel_asc' else bucket.desc(), *time_sort]
+
     with Session() as db:
         total = db.scalar(select(func.count(Message.id)).where(*filters)) or 0
         cursor_filter = []
         if before_ts is not None:
-            cursor_filter.append(or_(Message.ts < before_ts,
-                                     and_(Message.ts == before_ts, Message.id < before_id)))
+            older = or_(Message.ts > before_ts if time_ascending else Message.ts < before_ts,
+                        and_(Message.ts == before_ts,
+                             Message.id > before_id if time_ascending else Message.id < before_id))
+            if by_channel:
+                next_bucket = bucket > before_channel if sort == 'channel_asc' else bucket < before_channel
+                cursor_filter.append(or_(next_bucket, and_(bucket == before_channel, older)))
+            else:
+                cursor_filter.append(older)
         rows = db.scalars(select(Message).where(*filters, *cursor_filter)
-                          .order_by(Message.ts.desc(), Message.id.desc())
-                          .limit(limit + 1)).all()
+                          .order_by(*order).limit(limit + 1)).all()
         has_more = len(rows) > limit
         page = rows[:limit]
         last = page[-1] if page else None
+        cursor = None
+        if has_more and last is not None:
+            cursor = {'before_ts': iso_message_time(last.ts), 'before_id': last.id}
+            if by_channel:
+                cursor['before_channel'] = (last.target if last.kind == 'channel'
+                                             and last.target in HISTORY_CHANNEL_SLOTS else terminal_bucket)
         return {'items': serialize_messages(db, page), 'total': total,
-                'has_more': has_more,
-                'next_cursor': {'before_ts': iso_message_time(last.ts), 'before_id': last.id}
-                               if has_more and last is not None else None}
+                'has_more': has_more, 'next_cursor': cursor}
 
 
 @app.get('/api/tx/diagnostics')
@@ -480,18 +523,31 @@ def command_status(command_id: int, session=Depends(user_session)):
         if not c: raise HTTPException(404, 'Unknown command')
         return {'id': c.id, 'kind': c.kind, 'state': c.state, 'error': c.error, 'result': c.result}
 
+def csv_safe_cell(value):
+    """Avoid spreadsheet formula execution in exported untrusted mesh text."""
+    text = str(value if value is not None else '')
+    return "'" + text if text.lstrip().startswith(('=', '+', '-', '@')) else text
+
+
 @app.get('/api/export/messages.csv')
 def export_messages(session=Depends(user_session)):
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['timestamp_utc', 'direction', 'kind', 'target', 'sender', 'text', 'status'])
-    with Session() as db:
-        rows = db.scalars(select(Message).order_by(Message.ts.desc()).limit(10000)).all()
-        for m in rows:
-            writer.writerow([m.ts.isoformat(), m.direction, m.kind, m.target, m.sender,
-                             "'" + m.body if m.body[:1] in ('=', '+', '-', '@') else m.body, m.status])
-    output.seek(0)
-    return StreamingResponse(iter([output.getvalue()]), media_type='text/csv',
+    """Stream the complete message archive, not an arbitrary first-10k truncation."""
+    def rows():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['timestamp_utc', 'direction', 'kind', 'target', 'sender', 'text', 'status'])
+        yield output.getvalue()
+        with Session() as db:
+            query = (select(Message).order_by(Message.ts.desc(), Message.id.desc())
+                     .execution_options(yield_per=500))
+            for m in db.scalars(query):
+                output.seek(0)
+                output.truncate(0)
+                writer.writerow([iso_message_time(m.ts), m.direction, m.kind,
+                                 csv_safe_cell(m.target), csv_safe_cell(m.sender),
+                                 csv_safe_cell(m.body), csv_safe_cell(m.status)])
+                yield output.getvalue()
+    return StreamingResponse(rows(), media_type='text/csv',
                              headers={'Content-Disposition': 'attachment; filename="meshcore-messages.csv"'})
 
 FIRMWARE_NAME = re.compile(r'^Heltec_t114(?:_without_display)?_companion_radio_usb[^/\\]*\.zip$', re.I)
