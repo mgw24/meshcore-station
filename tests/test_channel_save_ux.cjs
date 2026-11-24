@@ -20,7 +20,7 @@ assert.match(saveHandler, /await pollCommand\(x\.id\)/, 'Save waits for radio co
 assert.match(saveHandler, /channelSaveStatus\(err\.message,true\)/, 'Save errors display inline');
 assert.match(saveHandler, /!configured && !secret && !name\.startsWith\('#'\)/, 'Hashtag channels may leave the key blank');
 assert.match(html, /id="channel-save-status"/, 'Inline save status is available');
-assert.match(html, /app\.js\?v=088-hashtag-key-1/, 'Browser cache is invalidated');
+assert.match(html, /app\.js\?v=089/, 'Browser cache is invalidated');
 assert.doesNotMatch(api, /body\.confirm != 'SAVE CHANNEL'/, 'Server no longer demands typed confirmation');
 assert.match(api, /class ChannelUpdate\(BaseModel\):\s+name:.*\s+secret_hex: str \| None = None/, 'API still accepts channel name and optional key');
 assert.match(api, /body\.confirm != f'DELETE CHANNEL \{index\}'/, 'Delete confirmation remains protected');

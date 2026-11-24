@@ -1,4 +1,4 @@
-# MeshCore Station 0.8.8
+# MeshCore Station 0.8.9
 
 **MeshCore Station** is a self-hosted web console for operating and monitoring a MeshCore USB Companion radio. It is built for a Heltec T114 V2 connected to an Ubuntu Linux server or virtual machine, with browser access from desktop and mobile devices.
 
@@ -31,4 +31,4 @@ A Docker-based collector communicates with the T114 over USB serial and records 
 
 MeshCore Station runs with **USB Companion firmware**; it does not turn the connected radio into a mesh repeater. Radio acceptance or a transmitted-packet count does not by itself prove that another node received a message. Private map coordinates are not broadcast unless location sharing is explicitly enabled.
 
-**Current release:** `0.8.8` · [Project source](https://github.com/mgw24/meshcore-station)
+**Current release:** `0.8.9` · [Project source](https://github.com/mgw24/meshcore-station)

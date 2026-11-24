@@ -29,6 +29,6 @@ def test_fallback_and_safe_output():
 
 
 def test_version_migration_is_consistent():
-    assert (ROOT / 'VERSION').read_text().strip() == '0.8.8'
-    assert "'version': '0.8.8'" in (ROOT / 'station/web.py').read_text()
-    assert 'MeshCore 0.8.8 · USB Companion' in (ROOT / 'static/index.html').read_text()
+    version = (ROOT / 'VERSION').read_text().strip()
+    assert f"'version': '{version}'" in (ROOT / 'station/web.py').read_text()
+    assert f'MeshCore {version} · USB Companion' in (ROOT / 'static/index.html').read_text()

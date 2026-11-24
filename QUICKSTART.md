@@ -1,48 +1,53 @@
-> **Existing v4 installation?** Use [V5-COMBINED-RELEASE.md](V5-COMBINED-RELEASE.md) to upgrade email digests and Grafana in one operation.
-
-# MeshCore Station v3 — Upgrade checklist
+# MeshCore Station — deployment and upgrade
 
 Source: https://github.com/mgw24/meshcore-station
 
-**Production-only:** no simulator service, no test/demo fixtures. Preserves the real radio configuration, PostgreSQL messages, Grafana data and existing VM `.env`.
+This guide applies to the current Docker Compose repository. Historical ZIP-based upgrade instructions are preserved in Git history rather than maintained alongside the current release.
+
+## Before updating
+
+Use an Ubuntu VM with the existing Docker Compose installation. Preserve the VM's protected, untracked `.env`, `runtime/`, PostgreSQL and Grafana volumes. Do not force-reset or remove volumes to fix Git merge conflicts.
 
 ```bash
 cd /opt/meshcore-station
+git branch --show-current
+git status --short
 sudo ./scripts/backup.sh
-sudo tar -czf /tmp/meshcore-pre-v3-source.tgz --exclude=runtime --exclude=.git .
 ```
 
-Copy `meshcore-station-production-v3.zip` to `/tmp/` on the Ubuntu VM. Then:
+Only fast-forward a clean local `main`. If files are modified or untracked, review and back up those changes first.
 
 ```bash
-sudo apt-get install -y unzip
-sudo unzip -o /tmp/meshcore-station-production-v3.zip -d /opt/
-cd /opt/meshcore-station
-sudo chmod +x scripts/*.sh
-sudo ./scripts/deploy-production.sh
-sudo docker compose restart grafana
+git fetch origin
+git pull --ff-only origin main
+bash scripts/check-release-version.sh
+sudo docker compose config --quiet
+```
+
+For ordinary web-only changes, rebuild the `api` service:
+
+```bash
+sudo docker compose up -d --build --no-deps api
 sudo docker compose ps
-sudo docker compose logs --tail=60 collector
+sudo docker compose logs --tail=50 api
 ```
 
-Clean out old demo data **only after previewing and confirming it is safe**:
+Rebuild the `collector` **only** when a release explicitly changes collector behavior. Restart Grafana separately only if Grafana settings or provisioning changed. Do not use `docker compose down -v`; that removes persistent data.
+
+## External Grafana URL
+
+If using a dedicated Grafana reverse-proxy hostname, set `GRAFANA_PUBLIC_URL=https://grafana.example.net/` **in the VM's local `.env`**, not in GitHub, and configure that hostname in your reverse proxy to forward to Grafana. Recreate `api` and `grafana` to apply a changed URL:
 
 ```bash
-sudo ./scripts/remove-simulation-data.sh --preview
-sudo ./scripts/remove-simulation-data.sh --apply
+sudo docker compose up -d --build --force-recreate --no-deps api grafana
 ```
 
-The cleanup command creates a fresh SQL backup before deleting matched simulation data. It does **not** remove live radio contacts, normal messages, channel settings, or firmware history.
+The default application host port is `8088`, configurable through `APP_PORT`. The container listens on port `8000`. Grafana uses host port `3300` by default.
 
-Open the station at `http://VM-IP:8088`; Grafana remains at `http://VM-IP:3300`.
+## Verify
 
-Check **Radio Health**, **Channels**, **Nodes & Contacts**, **Node Map**, **Messages**, and **Grafana**. Hard refresh Firefox after deploying. Mobile layout works over the existing VPN; no Tailscale is required. In the map, no coordinates means no plotted node, even if RX packets are increasing.
+Open the web application, check Radio Monitor, Messages, Channels, and Grafana. An online radio and successful transmit acceptance do **not** guarantee another node received a message.
 
-To publish the code to GitHub, extract the ZIP into your **cloned GitHub working copy**, review changed files, and commit/push to `https://github.com/mgw24/meshcore-station`. See the full README for commands. The package does not automatically push or overwrite your GitHub repository.
+Review the three retained recent release notes: [0.8.7](RELEASE-0.8.7.md), [0.8.8](RELEASE-0.8.8.md), and [0.8.9](RELEASE-0.8.9.md).
 
-## Email digests (v5)
-
-Upgrade safely using the instructions in `V5-RELEASE-NOTES.md`. Enable the
-SMTP encryption key with `sudo ./scripts/enable-digests.sh`, start the `digest`
-container, then open **Email Digests** in the web interface. Configure SMTP
-and send a test email before enabling the schedule. Leave `.env` out of Git.
+The README contains a prominent **AI Development Disclosure**. All changes should pass the protected `main` branch's automated tests before merging.
