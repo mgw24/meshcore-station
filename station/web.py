@@ -754,7 +754,6 @@ def routing_update(body: RoutingSettings, session=Depends(require_csrf)):
 class ChannelUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=31)
     secret_hex: str | None = None
-    confirm: str
 
 class ChannelDelete(BaseModel):
     confirm: str
@@ -779,7 +778,6 @@ def channel_refresh(session=Depends(require_csrf)):
 @app.put('/api/channels/{index}')
 def channel_update(index: int, body: ChannelUpdate, session=Depends(require_csrf)):
     if not 0 <= index <= 7: raise HTTPException(422, 'Channel index must be 0-7')
-    if body.confirm != 'SAVE CHANNEL': raise HTTPException(422, 'Type SAVE CHANNEL to confirm')
     name = body.name.strip()
     if not name: raise HTTPException(422, 'Channel name must not be blank')
     secret = body.secret_hex.strip() if body.secret_hex is not None else None
