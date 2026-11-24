@@ -44,4 +44,8 @@ jobs:
           GRAFANA_DB_PASSWORD: test-only-not-a-secret
           GRAFANA_ADMIN_PASSWORD: test-only-not-a-secret
           RADIO_DEVICE: /dev/ttyACM0
-        run: docker compose -f compose.yaml config --quiet
+        run: |
+          # Compose services reference .env explicitly; CI supplies only placeholder values.
+          cp .env.example .env
+          docker compose -f compose.yaml config --quiet
+          rm .env
