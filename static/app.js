@@ -204,21 +204,42 @@ function renderHealth(){const h=S.health;if(!h)return;
  $('health-freshness').textContent=h.sample_fresh?'Recent telemetry':'Telemetry delayed/stale';
  $('health-details').innerHTML=[['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['Flood TX',show(d.flood_tx)],['Direct TX',show(d.direct_tx)],['RX airtime',d.rx_air_secs==null?'Unavailable':show(d.rx_air_secs)+' s'],['TX airtime',d.tx_air_secs==null?'Unavailable':show(d.tx_air_secs)+' s']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
 }
+function updateChannelSaveHint(){
+ const slot=Number($('channel-slot').value);
+ const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===slot)?.configured;
+ $('channel-save-hint').textContent=configured
+   ? 'Leave the key blank to keep the existing shared key; entering one replaces it.'
+   : 'This slot is empty. Enter the 32 hexadecimal characters of the group’s 16-byte shared key.';
+}
+function channelSaveStatus(message, failed=false){
+ const el=$('channel-save-status');el.textContent=message;
+ el.style.color=failed?'#ed8991':'';
+}
 function renderChannels(){const slots=S.channels?.slots||[];
  $('channels-table').innerHTML=slots.map(c=>`<tr><td>#${c.index}</td><td>${H(c.name||'—')}</td><td>${c.configured?'Configured':'Empty'}</td><td><button class="subtle" type="button" data-edit-channel="${c.index}">Edit</button></td></tr>`).join('');
  const opts=slots.map(c=>`<option value="${c.index}">#${c.index} · ${H(c.name||'(empty)')}</option>`).join('');
  for(const id of ['channel-slot','channel-delete-slot']){const e=$(id),old=e.value;if(e.innerHTML!==opts){e.innerHTML=opts;if(slots.some(c=>String(c.index)===old))e.value=old}}
+ updateChannelSaveHint();
 }
 $('channels-table').addEventListener('click',e=>{const idx=e.target.dataset.editChannel;if(idx===undefined)return;
- $('channel-slot').value=idx;$('channel-name').value=S.channels.slots.find(c=>String(c.index)===idx)?.name||'';$('channel-key').value='';$('channel-name').focus()});
+ $('channel-slot').value=idx;$('channel-name').value=S.channels.slots.find(c=>String(c.index)===idx)?.name||'';$('channel-key').value='';channelSaveStatus('');updateChannelSaveHint();$('channel-name').focus()});
+$('channel-slot').addEventListener('change',()=>{channelSaveStatus('');$('channel-key').value='';updateChannelSaveHint()});
 $('channel-delete-slot').addEventListener('change',e=>{$('channel-delete-confirm').placeholder='DELETE CHANNEL '+e.target.value});
 $('channel-form').addEventListener('submit',async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;
- try{const idx=Number($('channel-slot').value),name=$('channel-name').value.trim(),secret=$('channel-key').value.trim();
- if(secret && !/^[0-9a-fA-F]{32}$/.test(secret))throw Error('Secret must be 32 hex characters');
- if(!confirm(`Save channel ${idx} (${name}) to the physical T114?${secret?' This will replace the existing key.':''}`))return;
- const x=await request('/api/channels/'+idx,{method:'PUT',body:JSON.stringify({name,secret_hex:secret||null,confirm:$('channel-confirm').value})});
- await pollCommand(x.id);$('channel-key').value='';$('channel-confirm').value='';toast('Channel saved to radio');await refresh();
- }catch(err){toast(err.message,true)}finally{btn.disabled=false}});
+ try{
+  const idx=Number($('channel-slot').value),name=$('channel-name').value.trim(),secret=$('channel-key').value.trim();
+  const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===idx)?.configured;
+  if(!name)throw Error('Enter a channel name.');
+  if(secret && !/^[0-9a-fA-F]{32}$/.test(secret))throw Error('Shared key must be 32 hexadecimal characters.');
+  if(!configured && !secret)throw Error('This slot is empty. Enter the 16-byte shared key (32 hexadecimal characters).');
+  channelSaveStatus('Saving channel to T114…');
+  const x=await request('/api/channels/'+idx,{method:'PUT',body:JSON.stringify({name,secret_hex:secret||null})});
+  await pollCommand(x.id);
+  $('channel-key').value='';
+  await refresh();
+  channelSaveStatus('Channel saved to radio.');
+  toast('Channel saved to radio');
+ }catch(err){channelSaveStatus(err.message,true);toast(err.message,true)}finally{btn.disabled=false}});
 $('channel-delete-form').addEventListener('submit',async e=>{e.preventDefault();const idx=Number($('channel-delete-slot').value);
  if(!confirm(`Permanently erase channel ${idx} from the T114? Its shared key will be lost.`))return;
  const btn=e.submitter;btn.disabled=true;
