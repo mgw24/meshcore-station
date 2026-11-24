@@ -1,4 +1,4 @@
-> **Existing v4 installation?** Use [V5-COMBINED-RELEASE.md](V5-COMBINED-RELEASE.md) to upgrade email digests and Grafana in one operation.
+> **Historical upgrade guide:** This document describes an older v3–v5 deployment process and is not the recommended procedure for current installations. See [archived v5 upgrade guidance](docs/legacy-v5-upgrade.md) only when recovering an older installation.
 
 # MeshCore Station v3 — Upgrade checklist
 
@@ -42,7 +42,7 @@ To publish the code to GitHub, extract the ZIP into your **cloned GitHub working
 
 ## Email digests (v5)
 
-Upgrade safely using the instructions in `V5-RELEASE-NOTES.md`. Enable the
+For historical v5 deployments, refer to [archived upgrade guidance](docs/legacy-v5-upgrade.md). Enable the
 SMTP encryption key with `sudo ./scripts/enable-digests.sh`, start the `digest`
 container, then open **Email Digests** in the web interface. Configure SMTP
 and send a test email before enabling the schedule. Leave `.env` out of Git.
