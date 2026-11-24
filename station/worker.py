@@ -13,6 +13,7 @@ from station.tx_tracking import expected_ack, received_ack, match_channel_echo
 from station.geo import contact_role
 from station.node_adverts import advertise_wait, coords_ok
 from station.secure import unseal_key
+from station.channel_keys import select_channel_key
 from station.db import (initialize, Session, Contact, Message, Sample, Alert, Command, AddressEntry, RxActivity,
                         RadioEvent, TxEvidence, StationStatus, status_set, record_event, utcnow)
 
@@ -537,12 +538,10 @@ class Collector:
                     secret = unseal_key(sealed)
                 else:
                     old = await self.mesh.commands.get_channel(idx)
-                    if old.type == EventType.ERROR: raise RuntimeError('Cannot read existing channel key; supply key')
+                    if old.type == EventType.ERROR:
+                        raise RuntimeError('Cannot read current channel; cannot safely choose shared key')
                     old_payload = old.payload if isinstance(old.payload, dict) else {}
-                    secret = old_payload.get('channel_secret', old_payload.get('secret'))
-                    if isinstance(secret, str): secret = bytes.fromhex(secret)
-                    if not isinstance(secret, bytes) or len(secret) != 16 or secret == bytes(16):
-                        raise ValueError('Cannot rename empty channel without a 16-byte shared key')
+                    secret, mode = select_channel_key(name, old_payload)
                 if len(secret) != 16: raise ValueError('Channel secret must be exactly 16 bytes')
                 response = await self.mesh.commands.set_channel(idx, name, secret)
                 if response.type == EventType.ERROR: raise RuntimeError('Radio rejected channel update')
