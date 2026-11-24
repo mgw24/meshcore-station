@@ -780,7 +780,7 @@ def channel_update(index: int, body: ChannelUpdate, session=Depends(require_csrf
     if not 0 <= index <= 7: raise HTTPException(422, 'Channel index must be 0-7')
     name = body.name.strip()
     if not name: raise HTTPException(422, 'Channel name must not be blank')
-    secret = body.secret_hex.strip() if body.secret_hex is not None else None
+    secret = (body.secret_hex or '').strip() or None
     if secret is not None and not re.fullmatch(r'[0-9a-fA-F]{32}', secret):
         raise HTTPException(422, 'Shared key must be exactly 32 hexadecimal characters (16 bytes)')
     args = {'index': index, 'name': name}
