@@ -209,7 +209,7 @@ function updateChannelSaveHint(){
  const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===slot)?.configured;
  $('channel-save-hint').textContent=configured
    ? 'Leave the key blank to keep the existing shared key; entering one replaces it.'
-   : 'This slot is empty. Enter the 32 hexadecimal characters of the group’s 16-byte shared key.';
+   : 'For a public hashtag channel (#name), leave the key blank to derive it automatically. Private groups require an existing shared key.';
 }
 function channelSaveStatus(message, failed=false){
  const el=$('channel-save-status');el.textContent=message;
@@ -231,7 +231,7 @@ $('channel-form').addEventListener('submit',async e=>{e.preventDefault();const b
   const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===idx)?.configured;
   if(!name)throw Error('Enter a channel name.');
   if(secret && !/^[0-9a-fA-F]{32}$/.test(secret))throw Error('Shared key must be 32 hexadecimal characters.');
-  if(!configured && !secret)throw Error('This slot is empty. Enter the 16-byte shared key (32 hexadecimal characters).');
+  if(!configured && !secret && !name.startsWith('#'))throw Error('For a new private channel, enter its shared key. Hashtag channels (#name) derive their key automatically.');
   channelSaveStatus('Saving channel to T114…');
   const x=await request('/api/channels/'+idx,{method:'PUT',body:JSON.stringify({name,secret_hex:secret||null})});
   await pollCommand(x.id);
