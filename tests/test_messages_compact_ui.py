@@ -35,7 +35,7 @@ def test_original_search_pagination_and_escape_retained():
 
 
 def test_version_metadata():
-    assert (ROOT/'VERSION').read_text().strip() == '0.8.8'
+    assert (ROOT/'VERSION').read_text().strip() == '0.8.9'
     assert '# MeshCore Station 0.8.8' in (ROOT/'README.md').read_text()
     assert 'MeshCore 0.8.8 · USB Companion' in HTML
     assert "'version': '0.8.8'" in (ROOT/'station/web.py').read_text()
