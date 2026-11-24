@@ -4,6 +4,14 @@
 
 The project combines messaging, radio diagnostics, node discovery, maps, and historical monitoring in one interface. It is an independent community project, **not an official MeshCore release**.
 
+## AI Development Disclosure
+
+**Most of MeshCore Station has been generated or developed with AI assistance, primarily using OpenAI's ChatGPT.** This includes substantial portions of the application code, architecture, tests, documentation, and development scripts. A human project maintainer directs the work, chooses requirements, configures the deployment, and provides testing and feedback.
+
+**AI-generated or AI-assisted software can contain bugs, security vulnerabilities, and unexpected behavior.** Anyone using or modifying this project should independently review the source code and test it in their own environment before relying on it—especially for radio hardware, firmware updates, message handling, credentials, or services exposed through a network.
+
+MeshCore Station is an independent community project, **not an official MeshCore release** and not endorsed or supported by OpenAI. It is provided under the repository's license, without warranties or guarantees of security, reliability, or fitness for a particular purpose.
+
 ## Features and capabilities
 
 - **Messaging:** Send channel and direct messages, browse a compact searchable history and an Overview preview with configured channel names, filter by named channel or direct messages, sort by date or channel across the full archive, and export records, expand messages for details, and compose `@name` channel replies or replies to identified direct contacts.
