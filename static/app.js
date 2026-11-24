@@ -15,6 +15,20 @@ async function request(path, opt={}){
   if(!res.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail));
   return data;
 }
+function grafanaLinkUrl(me, current=location){
+  const configured=String(me?.grafana_url||'').trim();
+  if(configured){
+    try{
+      const url=new URL(configured);
+      if(['http:','https:'].includes(url.protocol) && url.hostname && !url.username && !url.password)
+        return url.href;
+    }catch{/* Invalid configuration falls back to the local port. */}
+  }
+  const port=Number(me?.grafana_port);
+  const validPort=Number.isInteger(port) && port>=1 && port<=65535?port:3300;
+  return `${current.protocol}//${current.hostname}:${validPort}/`;
+}
+function setGrafanaLink(me){$('grafana-link').href=grafanaLinkUrl(me)}
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
 function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',monitor:'Radio Monitor',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions','my-node':'My Node & Adverts'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();}
@@ -89,7 +103,7 @@ async function refresh(){if(!S.csrf || loading)return;loading=true;try{
 }catch(e){toast(e.message,true)}finally{loading=false}}
 async function enqueue(payload){const x=await request('/api/commands',{method:'POST',body:JSON.stringify(payload)});toast('Command queued #'+x.id);const deadline=Date.now()+20000;while(Date.now()<deadline){await new Promise(r=>setTimeout(r,1200));let y=await request('/api/commands/'+x.id);if(y.state==='failed')throw Error(y.error);if(y.state==='complete'){toast('Radio command accepted');await refresh();return y}}
  toast('Command queued. Check activity for results.')}
-$('login-form').addEventListener('submit',async e=>{e.preventDefault();$('login-error').textContent='';const form=new FormData(e.target);try{const res=await request('/api/login',{method:'POST',body:JSON.stringify({username:form.get('username'),password:form.get('password')})});S.csrf=res.csrf;showApp();$('grafana-link').href=`${location.protocol}//${location.hostname}:3300`;await refresh()}catch(err){$('login-error').textContent=err.message}});
+$('login-form').addEventListener('submit',async e=>{e.preventDefault();$('login-error').textContent='';const form=new FormData(e.target);try{const res=await request('/api/login',{method:'POST',body:JSON.stringify({username:form.get('username'),password:form.get('password')})});S.csrf=res.csrf;showApp();const me=await request('/api/me');setGrafanaLink(me);await refresh()}catch(err){$('login-error').textContent=err.message}});
 document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>navigate(e.dataset.view)));
 document.querySelectorAll('.go-messages').forEach(e=>e.addEventListener('click',()=>navigate('messages')));
 $('logout').addEventListener('click',async()=>{try{await request('/api/logout',{method:'POST'})}finally{showLogin()}});
@@ -104,7 +118,7 @@ $('firmware-form').addEventListener('submit',async e=>{e.preventDefault();if(!co
 async function showJob(id){try{let j=await request('/api/firmware/jobs/'+id);$('firmware-log').textContent=`${j.status}: ${j.message||''}\nSHA256: ${j.sha256||''}\n\n${j.log||'No flashing output yet.'}`}catch(e){toast(e.message,true)}}
 $('firmware-jobs').addEventListener('click',e=>{const id=e.target.dataset.job;if(id)showJob(id)});
 $('export-messages').addEventListener('click',async e=>{e.preventDefault();try{const res=await fetch('/api/export/messages.csv',{credentials:'same-origin'});if(!res.ok)throw Error('Export failed');const blob=await res.blob();let u=URL.createObjectURL(blob);let a=document.createElement('a');a.href=u;a.download='meshcore-messages.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}catch(err){toast(err.message,true)}});
-(async()=>{try{let me=await request('/api/me');S.csrf=me.csrf;showApp();$('grafana-link').href=`${location.protocol}//${location.hostname}:${me.grafana_port}`;await refresh()}catch{showLogin()}})();
+(async()=>{try{let me=await request('/api/me');S.csrf=me.csrf;showApp();setGrafanaLink(me);await refresh()}catch{showLogin()}})();
 setInterval(()=>{if(S.csrf)refresh()},10000);
 
 // Dependency-free, Firefox-safe map. No hidden-tab Leaflet initialisation, no CDN scripts.
@@ -190,21 +204,42 @@ function renderHealth(){const h=S.health;if(!h)return;
  $('health-freshness').textContent=h.sample_fresh?'Recent telemetry':'Telemetry delayed/stale';
  $('health-details').innerHTML=[['Flood RX',show(d.flood_rx)],['Direct RX',show(d.direct_rx)],['Flood TX',show(d.flood_tx)],['Direct TX',show(d.direct_tx)],['RX airtime',d.rx_air_secs==null?'Unavailable':show(d.rx_air_secs)+' s'],['TX airtime',d.tx_air_secs==null?'Unavailable':show(d.tx_air_secs)+' s']].map(([k,v])=>`<div class="health-detail"><span>${H(k)}</span><b>${H(v)}</b></div>`).join('');
 }
+function updateChannelSaveHint(){
+ const slot=Number($('channel-slot').value);
+ const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===slot)?.configured;
+ $('channel-save-hint').textContent=configured
+   ? 'Leave the key blank to keep the existing shared key; entering one replaces it.'
+   : 'For a public hashtag channel (#name), leave the key blank to derive it automatically. Private groups require an existing shared key.';
+}
+function channelSaveStatus(message, failed=false){
+ const el=$('channel-save-status');el.textContent=message;
+ el.style.color=failed?'#ed8991':'';
+}
 function renderChannels(){const slots=S.channels?.slots||[];
  $('channels-table').innerHTML=slots.map(c=>`<tr><td>#${c.index}</td><td>${H(c.name||'—')}</td><td>${c.configured?'Configured':'Empty'}</td><td><button class="subtle" type="button" data-edit-channel="${c.index}">Edit</button></td></tr>`).join('');
  const opts=slots.map(c=>`<option value="${c.index}">#${c.index} · ${H(c.name||'(empty)')}</option>`).join('');
  for(const id of ['channel-slot','channel-delete-slot']){const e=$(id),old=e.value;if(e.innerHTML!==opts){e.innerHTML=opts;if(slots.some(c=>String(c.index)===old))e.value=old}}
+ updateChannelSaveHint();
 }
 $('channels-table').addEventListener('click',e=>{const idx=e.target.dataset.editChannel;if(idx===undefined)return;
- $('channel-slot').value=idx;$('channel-name').value=S.channels.slots.find(c=>String(c.index)===idx)?.name||'';$('channel-key').value='';$('channel-name').focus()});
+ $('channel-slot').value=idx;$('channel-name').value=S.channels.slots.find(c=>String(c.index)===idx)?.name||'';$('channel-key').value='';channelSaveStatus('');updateChannelSaveHint();$('channel-name').focus()});
+$('channel-slot').addEventListener('change',()=>{channelSaveStatus('');$('channel-key').value='';updateChannelSaveHint()});
 $('channel-delete-slot').addEventListener('change',e=>{$('channel-delete-confirm').placeholder='DELETE CHANNEL '+e.target.value});
 $('channel-form').addEventListener('submit',async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;
- try{const idx=Number($('channel-slot').value),name=$('channel-name').value.trim(),secret=$('channel-key').value.trim();
- if(secret && !/^[0-9a-fA-F]{32}$/.test(secret))throw Error('Secret must be 32 hex characters');
- if(!confirm(`Save channel ${idx} (${name}) to the physical T114?${secret?' This will replace the existing key.':''}`))return;
- const x=await request('/api/channels/'+idx,{method:'PUT',body:JSON.stringify({name,secret_hex:secret||null,confirm:$('channel-confirm').value})});
- await pollCommand(x.id);$('channel-key').value='';$('channel-confirm').value='';toast('Channel saved to radio');await refresh();
- }catch(err){toast(err.message,true)}finally{btn.disabled=false}});
+ try{
+  const idx=Number($('channel-slot').value),name=$('channel-name').value.trim(),secret=$('channel-key').value.trim();
+  const configured=(S.channels?.slots||[]).find(c=>Number(c.index)===idx)?.configured;
+  if(!name)throw Error('Enter a channel name.');
+  if(secret && !/^[0-9a-fA-F]{32}$/.test(secret))throw Error('Shared key must be 32 hexadecimal characters.');
+  if(!configured && !secret && !name.startsWith('#'))throw Error('For a new private channel, enter its shared key. Hashtag channels (#name) derive their key automatically.');
+  channelSaveStatus('Saving channel to T114…');
+  const x=await request('/api/channels/'+idx,{method:'PUT',body:JSON.stringify({name,secret_hex:secret||null})});
+  await pollCommand(x.id);
+  $('channel-key').value='';
+  await refresh();
+  channelSaveStatus('Channel saved to radio.');
+  toast('Channel saved to radio');
+ }catch(err){channelSaveStatus(err.message,true);toast(err.message,true)}finally{btn.disabled=false}});
 $('channel-delete-form').addEventListener('submit',async e=>{e.preventDefault();const idx=Number($('channel-delete-slot').value);
  if(!confirm(`Permanently erase channel ${idx} from the T114? Its shared key will be lost.`))return;
  const btn=e.submitter;btn.disabled=true;

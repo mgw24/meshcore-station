@@ -7,9 +7,9 @@ mapfile -t old < <(docker ps -aq --filter 'label=com.docker.compose.project=mesh
 if (( ${#old[@]} > 0 )); then
   docker rm -f "${old[@]}"
 fi
-# Remove obsolete simulation/test scaffolding left by older installations.
-rm -rf -- tests .pytest_cache
-rm -f -- scripts/switch-to-radio.sh requirements-dev.txt .github/workflows/tests.yml
+# Remove only retired simulation scaffolding; retain tests and GitHub Actions.
+rm -rf -- .pytest_cache
+rm -f -- scripts/switch-to-radio.sh requirements-dev.txt
 sed -i '/^SIMULATION=/d' .env
 [ -n "$(grep '^RADIO_POWER_SOURCE=' .env || true)" ] || echo 'RADIO_POWER_SOURCE=usb' >> .env
 chmod 0600 .env

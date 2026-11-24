@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -102,10 +103,28 @@ def login(body: Login, request: Request, response: Response):
                         samesite='strict', path='/')
     return {'username': USERNAME, 'csrf': csrf}
 
+def grafana_public_url():
+    """Return only a safe, administrator-configured Grafana link."""
+    raw = os.getenv('GRAFANA_PUBLIC_URL', '').strip()
+    if not raw or any(char.isspace() for char in raw):
+        return None
+    try:
+        url = urlsplit(raw)
+        if (url.scheme not in ('http', 'https') or not url.hostname
+                or url.username or url.password or url.query or url.fragment):
+            return None
+        if url.port is not None and url.port < 1:
+            return None
+    except ValueError:
+        return None
+    return raw.rstrip('/') + '/'
+
+
 @app.get('/api/me')
 def me(session=Depends(user_session)):
     return {'username': session['u'], 'csrf': session['csrf'],
-            'grafana_port': int(os.getenv('GRAFANA_PORT', 3300))}
+            'grafana_port': int(os.getenv('GRAFANA_PORT', 3300)),
+            'grafana_url': grafana_public_url()}
 
 @app.post('/api/logout')
 def logout(response: Response, session=Depends(require_csrf)):
@@ -735,7 +754,6 @@ def routing_update(body: RoutingSettings, session=Depends(require_csrf)):
 class ChannelUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=31)
     secret_hex: str | None = None
-    confirm: str
 
 class ChannelDelete(BaseModel):
     confirm: str
@@ -760,10 +778,9 @@ def channel_refresh(session=Depends(require_csrf)):
 @app.put('/api/channels/{index}')
 def channel_update(index: int, body: ChannelUpdate, session=Depends(require_csrf)):
     if not 0 <= index <= 7: raise HTTPException(422, 'Channel index must be 0-7')
-    if body.confirm != 'SAVE CHANNEL': raise HTTPException(422, 'Type SAVE CHANNEL to confirm')
     name = body.name.strip()
     if not name: raise HTTPException(422, 'Channel name must not be blank')
-    secret = body.secret_hex.strip() if body.secret_hex is not None else None
+    secret = (body.secret_hex or '').strip() or None
     if secret is not None and not re.fullmatch(r'[0-9a-fA-F]{32}', secret):
         raise HTTPException(422, 'Shared key must be exactly 32 hexadecimal characters (16 bytes)')
     args = {'index': index, 'name': name}

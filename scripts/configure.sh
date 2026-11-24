@@ -27,7 +27,7 @@ values={'POSTGRES_USER':'meshcore','POSTGRES_DB':'meshcore','POSTGRES_PASSWORD':
 'GRAFANA_DB_PASSWORD':secrets.token_hex(24),'GRAFANA_ADMIN_PASSWORD':secrets.token_urlsafe(24),
 'ADMIN_USERNAME':user,'ADMIN_PASSWORD_SALT':salt,'ADMIN_PASSWORD_HASH':digest,
 'SESSION_SECRET':secrets.token_hex(32),'BIND_IP':ip,'APP_PORT':'8088','GRAFANA_PORT':'3300',
-'RADIO_DEVICE':dev,'RADIO_POWER_SOURCE':'usb','COOKIE_SECURE':'false',
+'RADIO_DEVICE':dev,'RADIO_POWER_SOURCE':'usb','COOKIE_SECURE':'false','GRAFANA_PUBLIC_URL':'',
 'SMTP_HOST':'','SMTP_PORT':'587','SMTP_USER':'','SMTP_PASSWORD':'','SMTP_FROM':'','ALERT_EMAIL':''}
 with open('.env','x') as out:
     for k,v in values.items():out.write(f'{k}={v}\n')
