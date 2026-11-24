@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=088-grafana-proxy-1"></head>
+<title>MeshCore Station</title><link rel="stylesheet" href="/assets/style.css?v=089"></head>
 <body>
 <div id="login-screen" class="login-screen"><form id="login-form" class="login-card">
   <div class="brand-orb">◉</div><h1>MeshCore Station</h1><p>Private network operations console</p>
@@ -23,7 +23,7 @@
   </nav><div class="nav-label">MAINTENANCE</div>
   <nav><button class="nav" data-view="radio">⚙ <span>Radio Settings</span></button><button class="nav" data-view="channels">⊞ <span>Channels</span></button><button class="nav" data-view="routing">⇢ <span>Routing &amp; Regions</span></button><button class="nav" data-view="firmware">⬡ <span>Firmware Manager</span></button><button class="nav" data-view="digest">✉ <span>Email Digests</span></button>
     <a class="nav" href="#" id="grafana-link" target="_blank" rel="noopener">▥ <span>Grafana</span></a>
-  </nav><div class="side-footer"><div>MeshCore 0.8.8 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
+  </nav><div class="side-footer"><div>MeshCore 0.8.9 · USB Companion</div><button id="logout" class="subtle">Sign out ↗</button></div>
 </aside>
 <main><header class="topbar"><div><span class="eyebrow">NETWORK MONITORING</span><h1 id="page-title">Overview</h1></div>
   <div class="top-actions"><span id="mode-badge" class="pill">Checking…</span><span id="connection-badge" class="pill red">● Offline</span><button id="logout-mobile" class="subtle mobile-only" type="button">Sign out</button><button id="refresh" class="icon-button" aria-label="Refresh now" title="Refresh now">↻</button></div>
@@ -108,7 +108,7 @@
   </div>
  </details>
  <details class="panel monitor-section"><summary><span><b>Packet Analysis &amp; Uptime</b><small>Flood/direct rates, receive errors, counter totals and reset events</small></span><span class="monitor-chevron" aria-hidden="true">⌄</span></summary>
-  <div class="monitor-section-body"><div class="two-col trends-grid"><div><h3>Flood vs direct · packets per minute</h3><div id="trend-paths" class="chart"></div></div><div><h3>Receive errors · per minute</h3><div id="trend-errors" class="chart"></div></div><div><h3>Radio uptime · seconds</h3><div id="trend-uptime-chart" class="chart"></div><div id="trend-reset-list" class="radio-reset-list"></div></div></div>
+  <div class="monitor-section-body"><div class="two-col trends-grid"><div><h3>Flood vs direct · packets per minute</h3><div id="trend-paths" class="chart"></div></div><div><h3>Receive errors · per minute</h3><div id="trend-errors" class="chart"></div></div><div><h3>Radio uptime · days, hours, minutes</h3><div id="trend-uptime-chart" class="chart"></div><div id="trend-reset-list" class="radio-reset-list"></div></div></div>
    <h3>Hardware counters · since radio boot</h3><div class="monitor-counts"><div><span>Received</span><b id="health-rx">—</b></div><div><span>Transmitted</span><b id="health-tx">—</b></div><div><span>Receive errors</span><b id="health-errors">—</b></div><div><span>Sample age</span><b id="health-age">—</b></div></div>
    <div id="health-details" class="health-details monitor-counter-detail"></div>
    <p class="hint">Since-boot counters differ from interval rates. RF packet totals include advertisements and routing traffic, not just messages; successful TX does not establish delivery.</p>
@@ -258,4 +258,4 @@
   <button class="button danger" type="submit">Start firmware update</button></form></article>
   <article class="panel"><div class="panel-head"><h2>Firmware update history</h2></div><div id="firmware-jobs" class="stream"></div><h3>Flash log</h3><pre id="firmware-log" class="log">Select a firmware job to see its log.</pre></article></div></section>
 </div><footer>MeshCore Station · Private deployment · Data stored locally · <span id="last-refresh">Not updated</span></footer></main>
-</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=088-hashtag-key-1"></script></body></html>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div><script src="/assets/app.js?v=089"></script></body></html>
