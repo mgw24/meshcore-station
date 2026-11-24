@@ -18,7 +18,7 @@ assert.doesNotMatch(saveHandler, /channel-confirm/, 'No typed confirmation in sa
 assert.match(saveHandler, /method:'PUT'/, 'Save uses the existing channel PUT endpoint');
 assert.match(saveHandler, /await pollCommand\(x\.id\)/, 'Save waits for radio command result');
 assert.match(saveHandler, /channelSaveStatus\(err\.message,true\)/, 'Save errors display inline');
-assert.match(saveHandler, /!configured && !secret/, 'Empty slots require a new shared key');
+assert.match(saveHandler, /!configured && !secret && !name\.startsWith\('#'\)/, 'Hashtag channels may leave the key blank');
 assert.match(html, /id="channel-save-status"/, 'Inline save status is available');
 assert.match(html, /app\.js\?v=088-channel-save-1/, 'Browser cache is invalidated');
 assert.doesNotMatch(api, /body\.confirm != 'SAVE CHANNEL'/, 'Server no longer demands typed confirmation');
