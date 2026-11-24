@@ -29,5 +29,5 @@ assert.match(js,/const me=await request\('\/api\/me'\);setGrafanaLink\(me\);awai
 assert.match(js,/S.csrf=me.csrf;showApp\(\);setGrafanaLink\(me\);await refresh\(\)/,'Session restore must configure Grafana link');
 assert.match(backend,/['"]grafana_url['"]:\s*grafana_public_url\(\)/);
 assert.match(compose,/GF_SERVER_ROOT_URL:.*GRAFANA_PUBLIC_URL/);
-assert.match(html,/app\.js\?v=088-channel-save-1/,'Updated script must bypass existing browser cache');
+assert.match(html,/app\.js\?v=088-hashtag-key-1/,'Updated script must bypass existing browser cache');
 console.log('Grafana reverse-proxy navigation: 11 checks passed');
