@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -102,10 +103,28 @@ def login(body: Login, request: Request, response: Response):
                         samesite='strict', path='/')
     return {'username': USERNAME, 'csrf': csrf}
 
+def grafana_public_url():
+    """Return only a safe, administrator-configured Grafana link."""
+    raw = os.getenv('GRAFANA_PUBLIC_URL', '').strip()
+    if not raw or any(char.isspace() for char in raw):
+        return None
+    try:
+        url = urlsplit(raw)
+        if (url.scheme not in ('http', 'https') or not url.hostname
+                or url.username or url.password or url.query or url.fragment):
+            return None
+        if url.port is not None and url.port < 1:
+            return None
+    except ValueError:
+        return None
+    return raw.rstrip('/') + '/'
+
+
 @app.get('/api/me')
 def me(session=Depends(user_session)):
     return {'username': session['u'], 'csrf': session['csrf'],
-            'grafana_port': int(os.getenv('GRAFANA_PORT', 3300))}
+            'grafana_port': int(os.getenv('GRAFANA_PORT', 3300)),
+            'grafana_url': grafana_public_url()}
 
 @app.post('/api/logout')
 def logout(response: Response, session=Depends(require_csrf)):
