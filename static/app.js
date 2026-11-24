@@ -15,6 +15,20 @@ async function request(path, opt={}){
   if(!res.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail));
   return data;
 }
+function grafanaLinkUrl(me, current=location){
+  const configured=String(me?.grafana_url||'').trim();
+  if(configured){
+    try{
+      const url=new URL(configured);
+      if(['http:','https:'].includes(url.protocol) && url.hostname && !url.username && !url.password)
+        return url.href;
+    }catch{/* Invalid configuration falls back to the local port. */}
+  }
+  const port=Number(me?.grafana_port);
+  const validPort=Number.isInteger(port) && port>=1 && port<=65535?port:3300;
+  return `${current.protocol}//${current.hostname}:${validPort}/`;
+}
+function setGrafanaLink(me){$('grafana-link').href=grafanaLinkUrl(me)}
 function showLogin(){S.csrf=null;$('shell').hidden=true;$('login-screen').hidden=false}
 function showApp(){ $('login-screen').hidden=true;$('shell').hidden=false }
 function navigate(view){S.page=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!=='view-'+view);document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('page-title').textContent=({overview:'Overview',messages:'Messages',nodes:'Nodes & Contacts',alerts:'Alerts',events:'Event Log',firmware:'Firmware Manager',map:'Node Map',radio:'Radio Settings',monitor:'Radio Monitor',channels:'Channel Management',address:'Address Book',digest:'Email Digests',routing:'Routing & Regions','my-node':'My Node & Adverts'})[view];render();if(view==='map')requestAnimationFrame(()=>requestAnimationFrame(updateMap));if(view==='digest')loadDigest();if(view==='messages')reloadMessageHistory();}
@@ -89,7 +103,7 @@ async function refresh(){if(!S.csrf || loading)return;loading=true;try{
 }catch(e){toast(e.message,true)}finally{loading=false}}
 async function enqueue(payload){const x=await request('/api/commands',{method:'POST',body:JSON.stringify(payload)});toast('Command queued #'+x.id);const deadline=Date.now()+20000;while(Date.now()<deadline){await new Promise(r=>setTimeout(r,1200));let y=await request('/api/commands/'+x.id);if(y.state==='failed')throw Error(y.error);if(y.state==='complete'){toast('Radio command accepted');await refresh();return y}}
  toast('Command queued. Check activity for results.')}
-$('login-form').addEventListener('submit',async e=>{e.preventDefault();$('login-error').textContent='';const form=new FormData(e.target);try{const res=await request('/api/login',{method:'POST',body:JSON.stringify({username:form.get('username'),password:form.get('password')})});S.csrf=res.csrf;showApp();$('grafana-link').href=`${location.protocol}//${location.hostname}:3300`;await refresh()}catch(err){$('login-error').textContent=err.message}});
+$('login-form').addEventListener('submit',async e=>{e.preventDefault();$('login-error').textContent='';const form=new FormData(e.target);try{const res=await request('/api/login',{method:'POST',body:JSON.stringify({username:form.get('username'),password:form.get('password')})});S.csrf=res.csrf;showApp();const me=await request('/api/me');setGrafanaLink(me);await refresh()}catch(err){$('login-error').textContent=err.message}});
 document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>navigate(e.dataset.view)));
 document.querySelectorAll('.go-messages').forEach(e=>e.addEventListener('click',()=>navigate('messages')));
 $('logout').addEventListener('click',async()=>{try{await request('/api/logout',{method:'POST'})}finally{showLogin()}});
@@ -104,7 +118,7 @@ $('firmware-form').addEventListener('submit',async e=>{e.preventDefault();if(!co
 async function showJob(id){try{let j=await request('/api/firmware/jobs/'+id);$('firmware-log').textContent=`${j.status}: ${j.message||''}\nSHA256: ${j.sha256||''}\n\n${j.log||'No flashing output yet.'}`}catch(e){toast(e.message,true)}}
 $('firmware-jobs').addEventListener('click',e=>{const id=e.target.dataset.job;if(id)showJob(id)});
 $('export-messages').addEventListener('click',async e=>{e.preventDefault();try{const res=await fetch('/api/export/messages.csv',{credentials:'same-origin'});if(!res.ok)throw Error('Export failed');const blob=await res.blob();let u=URL.createObjectURL(blob);let a=document.createElement('a');a.href=u;a.download='meshcore-messages.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}catch(err){toast(err.message,true)}});
-(async()=>{try{let me=await request('/api/me');S.csrf=me.csrf;showApp();$('grafana-link').href=`${location.protocol}//${location.hostname}:${me.grafana_port}`;await refresh()}catch{showLogin()}})();
+(async()=>{try{let me=await request('/api/me');S.csrf=me.csrf;showApp();setGrafanaLink(me);await refresh()}catch{showLogin()}})();
 setInterval(()=>{if(S.csrf)refresh()},10000);
 
 // Dependency-free, Firefox-safe map. No hidden-tab Leaflet initialisation, no CDN scripts.
