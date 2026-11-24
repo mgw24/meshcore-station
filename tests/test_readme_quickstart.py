@@ -29,7 +29,7 @@ def test_installation_commands_match_scripts():
 
 def test_ports_serial_and_secrets():
     for expected in ("8088", "3300", "/dev/ttyACM0", "GRAFANA_PUBLIC_URL", "COOKIE_SECURE",
-                     "USB Companion", "backups", "docker compose down -v"):
+                     "USB Companion", "backup", "docker compose down -v"):
         assert expected in README
     assert "'APP_PORT':'8088'" in CONFIG
     assert "'GRAFANA_PORT':'3300'" in CONFIG
