@@ -35,6 +35,8 @@ jobs:
           for f in tests/*.cjs; do node "$f"; done
       - name: Shell syntax
         run: bash -n scripts/*.sh
+      - name: Release version consistency
+        run: bash scripts/check-release-version.sh
       - name: Docker Compose configuration (placeholder secrets only)
         env:
           BIND_IP: 127.0.0.1
