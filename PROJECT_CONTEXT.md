@@ -24,6 +24,8 @@ not examples or older instructions.
 - 0.8.7: Overview shows named channels rather than generic `channel` senders.
 - 0.8.8: Full-archive channel filtering and global channel/date sorting;
   safer CSV export, stable pagination, and startup lifespan cleanup.
+- 0.8.9: Human-readable radio uptime, three-recent-release-note retention,
+  and the prior Grafana/channel-management fixes consolidated into a release.
 - Tests: `PYTHONPATH=. pytest -q` and `for f in tests/*.cjs; do node "$f"; done`.
 - Browser assets have versioned query parameters in `static/index.html`.
   Change the cache key whenever JavaScript or CSS changes in a release.
