@@ -696,6 +696,12 @@ $('reply-cancel').addEventListener('click',()=>{$('reply-context').hidden=true;}
 // 0.8.4 — telemetry trends. Everything comes from PostgreSQL, not a second serial connection.
 const TR084={data:null,location:null,adverts:null};
 function trendFmt084(v,digits=1){return typeof v==='number'&&Number.isFinite(v)?v.toFixed(digits):'—'}
+function durationFmt089(seconds){
+ if(typeof seconds!=='number'||!Number.isFinite(seconds)||seconds<0)return '—';
+ const total=Math.floor(seconds/60);
+ const days=Math.floor(total/1440),hours=Math.floor((total%1440)/60),minutes=total%60;
+ return [days?days+'d':'',hours?hours+'h':'',(!days&&!hours||minutes)?minutes+'m':''].filter(Boolean).join(' ');
+}
 function trendSvg084(id,points,keys,colors,unit){
  const parent=$(id);if(!parent)return;
  if(!points.length || !keys.some(k=>points.some(p=>typeof p[k]==='number'))){parent.innerHTML=empty('No measurement available for this interval');return}
@@ -705,7 +711,7 @@ function trendSvg084(id,points,keys,colors,unit){
  const margin=(max-min)*.10;min-=margin;max+=margin;
  const px=i=>pad+(points.length<=1?wide/2:wide*i/(points.length-1));
  const py=v=>h-pad-(v-min)/(max-min)*tall;
- let grid='';for(let i=0;i<4;i++){const y=low+15+i*49;grid+=`<line x1="${pad}" x2="${w-pad}" y1="${y}" y2="${y}" stroke="#34505b" stroke-dasharray="4 5"/><text x="3" y="${y+4}" fill="#99b4c2" font-size="12">${(max-(y-(h-pad-tall))/tall*(max-min)).toFixed(1)}</text>`;}
+ let grid='';for(let i=0;i<4;i++){const y=low+15+i*49;grid+=`<line x1="${pad}" x2="${w-pad}" y1="${y}" y2="${y}" stroke="#34505b" stroke-dasharray="4 5"/><text x="3" y="${y+4}" fill="#99b4c2" font-size="12">${keys.length===1&&keys[0]==='uptime_secs'?durationFmt089(Math.max(0,max-(y-(h-pad-tall))/tall*(max-min))):(max-(y-(h-pad-tall))/tall*(max-min)).toFixed(1)}</text>`;}
  const lines=keys.map((key,j)=>{let segments=[],run=[];const add=()=>{if(run.length>0){segments.push(run.join(' '));run=[]}};
   points.forEach((p,i)=>{const v=p[key];if(typeof v!=='number'||p.reset&&key.includes('per_min'))add();else run.push(px(i).toFixed(1)+','+py(v).toFixed(1))});add();
   return segments.map(segment=>`<polyline points="${segment}" fill="none" stroke="${colors[j]}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`).join('');}).join('');
@@ -716,13 +722,13 @@ function trendSvg084(id,points,keys,colors,unit){
 function renderTrends084(){const d=TR084.data;if(!d)return;const p=d.points||[],last=[...p].reverse().find(x=>x.rx_per_min!==null||x.tx_per_min!==null)||{};
  $('trend-rx').textContent=trendFmt084(last.rx_per_min);$('trend-tx').textContent=trendFmt084(last.tx_per_min);
  $('monitor-error-rate').textContent=trendFmt084([...p].reverse().find(x=>x.errors_per_min!==null&&x.errors_per_min!==undefined)?.errors_per_min);
- $('trend-resets').textContent=String(d.reset_count??0);$('trend-uptime').textContent=d.latest?.uptime_secs!=null?Math.round(d.latest.uptime_secs).toLocaleString()+' s':'—';
+ $('trend-resets').textContent=String(d.reset_count??0);$('trend-uptime').textContent=durationFmt089(d.latest?.uptime_secs);
  trendSvg084('trend-traffic',p,['rx_per_min','tx_per_min'],['#42d7bf','#f0ac52'],'packets/min');
  trendSvg084('trend-paths',p,['flood_rx_per_min','direct_rx_per_min','flood_tx_per_min','direct_tx_per_min'],['#42d7bf','#75b9e8','#ffb356','#b7a1fc'],'packets/min');
  trendSvg084('trend-errors',p,['errors_per_min'],['#eb857c'],'errors/min');
  trendSvg084('trend-rf',p,['rssi_dbm','noise_floor_dbm'],['#75b9e8','#42d7bf'],'dBm');
  trendSvg084('trend-snr',p,['snr_db'],['#b7a1fc'],'dB');
- trendSvg084('trend-uptime-chart',p,['uptime_secs'],['#f0ac52'],'seconds');
+ trendSvg084('trend-uptime-chart',p,['uptime_secs'],['#f0ac52'],'uptime');
  $('trend-reset-list').innerHTML=d.resets?.length?d.resets.slice(-8).reverse().map(x=>`<div class="radio-reset">↻ ${H(dt(x.ts))} · ${H(x.reason)}</div>`).join(''):'No uptime or counter reset detected in this time window.';
 }
 async function refreshTrends084(hours){if(!S.csrf)return;TR084.data=await request('/api/radio/trends?hours='+Number(hours||24));renderTrends084()}
